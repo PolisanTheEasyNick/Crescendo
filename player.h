@@ -1,9 +1,9 @@
 #ifndef PLAYER_H
 #define PLAYER_H
+#include "pugixml.hpp"
 #include <cstring>
 #include <dbus/dbus.h>
 #include <iostream>
-
 #include <vector>
 
 class Player {
@@ -12,6 +12,17 @@ private:
   DBusConnection *dbus_conn = nullptr;
   DBusError dbus_error;
   unsigned int selected_player_id = -1;
+  bool play_pause_method = false;
+  bool pause_method = false;
+  bool play_method = false;
+  bool next_method = false;
+  bool previous_method = false;
+  bool setpos_method = false;
+  bool is_shuffle_prop = false;
+  bool is_pos_prop = false;
+  bool is_volume_prop = false;
+  bool is_playback_status_prop = false;
+  bool is_metadata_prop = false;
 
 public:
   Player();
@@ -31,6 +42,7 @@ public:
   bool set_position(int64_t pos);
   double get_volume();
   bool set_volume(double volume);
+  std::string get_current_player_name();
   std::vector<std::pair<std::string, std::string>> get_metadata();
   // TODO
   /* 1. Check for abilities for checked player. Many bools with writed abilities

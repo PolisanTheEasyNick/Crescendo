@@ -129,15 +129,229 @@ void Player::print_players_names() {
 }
 
 bool Player::select_player(unsigned int new_id) {
+  get_players();
   if (new_id < 0 || new_id > players.size()) {
     std::cout << "This player does not exists!" << std::endl;
     return false;
   }
   selected_player_id = new_id;
-  return true;
+  // send Interspect
+  if (dbus_error_is_set(&dbus_error)) {
+    printf("DBus error: %s\n", dbus_error.message);
+    return false;
+  }
+  DBusMessage *dbus_msg, *dbus_reply;
+  // Compose remote procedure call
+  dbus_msg = dbus_message_new_method_call(
+      players[selected_player_id].c_str(), "/org/mpris/MediaPlayer2",
+      "org.freedesktop.DBus.Introspectable", "Introspect");
+  if (!dbus_msg) {
+    std::cout << "Error creating message." << std::endl;
+    return false;
+  }
+  // Invoke remote procedure call, block for response
+  dbus_reply = dbus_connection_send_with_reply_and_block(
+      dbus_conn, dbus_msg, DBUS_TIMEOUT_USE_DEFAULT, &dbus_error);
+
+  if (!dbus_reply || dbus_error_is_set(&dbus_error)) {
+    std::cout << "Error getting reply: " << dbus_error.message << std::endl;
+    return false;
+  }
+
+  std::cout << "Parsing reply" << std::endl;
+  char *xml_introspect;
+  dbus_message_get_args(dbus_reply, &dbus_error, DBUS_TYPE_STRING,
+                        &xml_introspect, DBUS_TYPE_INVALID);
+  if (!dbus_error_is_set(&dbus_error)) {
+    dbus_message_unref(dbus_msg);
+    dbus_message_unref(dbus_reply);
+    // start parsing and checking
+    pugi::xml_document doc;
+    pugi::xml_parse_result result = doc.load_string(xml_introspect);
+    if (!result) {
+      std::cout << "Failed to parse XML: " << result.description() << std::endl;
+      return false;
+    }
+    // Find the root node
+    pugi::xml_node root = doc.document_element();
+    if (!root) {
+      std::cout << "Error: no root element" << std::endl;
+      return 1;
+    }
+
+    pugi::xml_node iface_node =
+        doc.select_node(
+               (std::string(
+                    "/node/interface[@name='org.mpris.MediaPlayer2.Player']")
+                    .c_str()))
+            .node();
+    // Searching for play_pause method...
+    std::cout << "Searching for PlayPause method... ";
+    pugi::xml_node methodNode =
+        iface_node.find_child_by_attribute("method", "name", "PlayPause");
+    if (methodNode) {
+      // Method found
+      std::cout << "found." << std::endl;
+      play_pause_method = true;
+    } else {
+      // Method not found
+      std::cout << "not found." << std::endl;
+      play_pause_method = false;
+    }
+
+    // Searching for pause method...
+    std::cout << "Searching for Pause method... ";
+    methodNode = iface_node.find_child_by_attribute("method", "name", "Pause");
+    if (methodNode) {
+      // Method found
+      std::cout << "found." << std::endl;
+      pause_method = true;
+    } else {
+      // Method not found
+      std::cout << "not found." << std::endl;
+      pause_method = false;
+    }
+
+    // Searching for Play method
+    std::cout << "Searching for Play method... ";
+    methodNode = iface_node.find_child_by_attribute("method", "name", "Play");
+    if (methodNode) {
+      // Method found
+      std::cout << "found." << std::endl;
+      play_method = true;
+    } else {
+      // Method not found
+      std::cout << "not found." << std::endl;
+      play_method = false;
+    }
+
+    // Searching for Next method
+    std::cout << "Searching for Next method... ";
+    methodNode = iface_node.find_child_by_attribute("method", "name", "Next");
+    if (methodNode) {
+      // Method found
+      std::cout << "found." << std::endl;
+      next_method = true;
+    } else {
+      // Method not found
+      std::cout << "not found." << std::endl;
+      next_method = false;
+    }
+
+    // Searching for Previous method
+    std::cout << "Searching for Previous method... ";
+    methodNode =
+        iface_node.find_child_by_attribute("method", "name", "Previous");
+    if (methodNode) {
+      // Method found
+      std::cout << "found." << std::endl;
+      previous_method = true;
+    } else {
+      // Method not found
+      std::cout << "not found." << std::endl;
+      previous_method = false;
+    }
+
+    // Searching for SetPosition method
+    std::cout << "Searching for SetPosition method... ";
+    methodNode =
+        iface_node.find_child_by_attribute("method", "name", "SetPosition");
+    if (methodNode) {
+      // Method found
+      std::cout << "found." << std::endl;
+      setpos_method = true;
+    } else {
+      // Method not found
+      std::cout << "not found." << std::endl;
+      setpos_method = false;
+    }
+
+    // Searching for Shuffle property
+    std::cout << "Searching for Shuffle property... ";
+    pugi::xml_node propertyNode =
+        iface_node.find_child_by_attribute("property", "name", "Shuffle");
+    if (propertyNode) {
+      // Property found
+      std::cout << "found." << std::endl;
+      is_shuffle_prop = true;
+    } else {
+      // Property not found
+      std::cout << "not found." << std::endl;
+      is_shuffle_prop = false;
+    }
+
+    // Searching for Position property
+    std::cout << "Searching for Position property... ";
+    propertyNode =
+        iface_node.find_child_by_attribute("property", "name", "Position");
+    if (propertyNode) {
+      // Property found
+      std::cout << "found." << std::endl;
+      is_pos_prop = true;
+    } else {
+      // Property not found
+      std::cout << "not found." << std::endl;
+      is_pos_prop = false;
+    }
+
+    // Searching for Volume property
+    std::cout << "Searching for Volume property... ";
+    propertyNode =
+        iface_node.find_child_by_attribute("property", "name", "Volume");
+    if (propertyNode) {
+      // Property found
+      std::cout << "found." << std::endl;
+      is_volume_prop = true;
+    } else {
+      // Property not found
+      std::cout << "not found." << std::endl;
+      is_volume_prop = false;
+    }
+
+    // Searching for PlaybackStatus property
+    std::cout << "Searching for PlaybackStatus property... ";
+    propertyNode = iface_node.find_child_by_attribute("property", "name",
+                                                      "PlaybackStatus");
+    if (propertyNode) {
+      // Property found
+      std::cout << "found." << std::endl;
+      is_playback_status_prop = true;
+    } else {
+      // Property not found
+      std::cout << "not found." << std::endl;
+      is_playback_status_prop = false;
+    }
+
+    // Searching for Metadata property
+    std::cout << "Searching for Metadata property... ";
+    propertyNode =
+        iface_node.find_child_by_attribute("property", "name", "Metadata");
+    if (propertyNode) {
+      // Property found
+      std::cout << "found." << std::endl;
+      is_metadata_prop = true;
+    } else {
+      // Property not found
+      std::cout << "not found." << std::endl;
+      is_metadata_prop = false;
+    }
+
+    return true;
+  } else {
+    std::cout << "Error while trying to parse reply: " << dbus_error.message
+              << std::endl;
+    dbus_message_unref(dbus_msg);
+    dbus_message_unref(dbus_reply);
+    return false;
+  }
 }
 
 bool Player::send_play_pause() {
+  if (!play_pause_method) {
+    std::cerr << "This player does not compatible with PlayPause method!"
+              << std::endl;
+    return false;
+  }
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
@@ -155,6 +369,11 @@ bool Player::send_play_pause() {
 }
 
 bool Player::send_pause() {
+  if (!pause_method) {
+    std::cerr << "This player does not compatible with Pause method!"
+              << std::endl;
+    return false;
+  }
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
@@ -172,6 +391,11 @@ bool Player::send_pause() {
 }
 
 bool Player::send_play() {
+  if (!play_method) {
+    std::cerr << "This player does not compatible with Play method!"
+              << std::endl;
+    return false;
+  }
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
@@ -189,6 +413,11 @@ bool Player::send_play() {
 }
 
 bool Player::send_next() {
+  if (!next_method) {
+    std::cerr << "This player does not compatible with Next method!"
+              << std::endl;
+    return false;
+  }
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
@@ -206,6 +435,11 @@ bool Player::send_next() {
 }
 
 bool Player::send_previous() {
+  if (!previous_method) {
+    std::cerr << "This player does not compatible with Previous method!"
+              << std::endl;
+    return false;
+  }
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
@@ -223,6 +457,11 @@ bool Player::send_previous() {
 }
 
 bool Player::get_shuffle() {
+  if (!is_shuffle_prop) {
+    std::cerr << "This player does not compatible with Shuffle property!"
+              << std::endl;
+    return false;
+  }
   DBusMessage *dbus_msg, *dbus_reply;
   if (selected_player_id == -1) {
     std::cout << "get_metadata(): Player not selected, can't get metadata"
@@ -266,6 +505,11 @@ bool Player::get_shuffle() {
 }
 
 bool Player::set_shuffle(bool isShuffle) {
+  if (!is_shuffle_prop) {
+    std::cerr << "This player does not compatible with Shuffle property!"
+              << std::endl;
+    return false;
+  }
   if (dbus_error_is_set(&dbus_error)) {
     printf("DBus error: %s\n", dbus_error.message);
     return false;
@@ -327,12 +571,12 @@ bool Player::set_shuffle(bool isShuffle) {
 }
 
 int64_t Player::get_position() {
-  DBusMessage *dbus_msg, *dbus_reply;
-  if (selected_player_id == -1) {
-    std::cout << "get_position(): Player not selected, can't get metadata"
+  if (!is_pos_prop) {
+    std::cerr << "This player does not compatible with Position property!"
               << std::endl;
     return 0;
   }
+  DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
       players[selected_player_id].c_str(), // Destination bus name
@@ -342,9 +586,6 @@ int64_t Player::get_position() {
 
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
-    dbus_connection_unref(dbus_conn);
-    std::string error_msg = dbus_error.message;
-    dbus_error_free(&dbus_error);
     return {};
   }
   const char *interfaceName = "org.mpris.MediaPlayer2.Player";
@@ -358,9 +599,6 @@ int64_t Player::get_position() {
   if (!dbus_reply || dbus_error_is_set(&dbus_error)) {
     std::cout << "Error getting reply: " << dbus_error.message << std::endl;
     dbus_message_unref(dbus_msg);
-    dbus_connection_unref(dbus_conn);
-    std::string error_msg = dbus_error.message;
-    dbus_error_free(&dbus_error);
     return 0;
   }
   DBusMessageIter iter;
@@ -388,73 +626,72 @@ int64_t Player::get_position() {
 }
 
 bool Player::set_position(int64_t pos) {
-  if (dbus_error_is_set(&dbus_error)) {
-    printf("DBus error: %s\n", dbus_error.message);
-    return false;
-  }
-  DBusMessage *dbus_msg, *dbus_reply;
-  // Compose remote procedure call
-  if (players[selected_player_id] == "org.mpris.MediaPlayer2.spotify") {
-    dbus_msg = dbus_message_new_method_call(
-        players[selected_player_id].c_str(), // Destination bus name
-        "/org/mpris/MediaPlayer2",           // Object path
-        "org.mpris.MediaPlayer2.Player",     // Interface name
-        "SetPosition");                      // Method name
-    if (!dbus_msg) {
-      std::cout << "Error creating message." << std::endl;
-      return false;
-    }
-
-    auto meta = get_metadata();
-    std::string trackid;
-    for (auto &info : meta) {
-      if (info.first == "mpris:trackid") {
-        trackid = info.second;
-        break;
-      }
-    }
-    DBusMessageIter iter;
-    dbus_message_iter_init_append(dbus_msg, &iter);
-    if (!dbus_message_iter_append_basic(&iter, DBUS_TYPE_OBJECT_PATH,
-                                        &trackid) ||
-        !dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT64, &pos)) {
-      std::cout << "Error appending arguments to message: "
-                << dbus_error.message << std::endl;
-      dbus_message_unref(dbus_msg);
-      return false;
-    }
-    // Set destination bus name
-    dbus_message_set_destination(dbus_msg, players[selected_player_id].c_str());
-
-    // Invoke remote procedure call, block for response
-    dbus_reply = dbus_connection_send_with_reply_and_block(
-        dbus_conn, dbus_msg, DBUS_TIMEOUT_USE_DEFAULT, &dbus_error);
-
-    // Check for errors
-    if (!dbus_reply || dbus_error_is_set(&dbus_error)) {
-      std::cout << "Error getting reply: " << dbus_error.message << std::endl;
-      dbus_message_unref(dbus_msg);
-      return false;
-    }
-
-    // Free reply message
-    dbus_message_unref(dbus_reply);
-
-    // Free message
-    dbus_message_unref(dbus_msg);
-    return true;
-  } else {
-    return false;
-  }
-}
-
-double Player::get_volume() {
-  DBusMessage *dbus_msg, *dbus_reply;
-  if (selected_player_id == -1) {
-    std::cout << "get_volume(): Player not selected, can't get volume"
+  if (!is_pos_prop) {
+    std::cerr << "This player does not compatible with Position property!"
               << std::endl;
     return 0;
   }
+  DBusMessage *dbus_msg, *dbus_reply;
+  // Compose remote procedure call
+  dbus_msg = dbus_message_new_method_call(
+      players[selected_player_id].c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",           // Object path
+      "org.mpris.MediaPlayer2.Player",     // Interface name
+      "SetPosition");                      // Method name
+  if (!dbus_msg) {
+    std::cout << "Error creating message." << std::endl;
+    return false;
+  }
+
+  auto meta = get_metadata();
+  std::string trackid;
+  for (auto &info : meta) {
+    if (info.first == "mpris:trackid") {
+      trackid = info.second;
+      break;
+    }
+  }
+  DBusMessageIter iter;
+  if (players[selected_player_id] == "org.mpris.MediaPlayer2.spotify") {
+    pos = pos * 1000000;
+  }
+  dbus_message_iter_init_append(dbus_msg, &iter);
+  if (!dbus_message_iter_append_basic(&iter, DBUS_TYPE_OBJECT_PATH, &trackid) ||
+      !dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT64, &pos)) {
+    std::cout << "Error appending arguments to message: " << dbus_error.message
+              << std::endl;
+    dbus_message_unref(dbus_msg);
+    return false;
+  }
+  // Set destination bus name
+  dbus_message_set_destination(dbus_msg, players[selected_player_id].c_str());
+
+  // Invoke remote procedure call, block for response
+  dbus_reply = dbus_connection_send_with_reply_and_block(
+      dbus_conn, dbus_msg, DBUS_TIMEOUT_USE_DEFAULT, &dbus_error);
+
+  // Check for errors
+  if (!dbus_reply || dbus_error_is_set(&dbus_error)) {
+    std::cout << "Error getting reply: " << dbus_error.message << std::endl;
+    dbus_message_unref(dbus_msg);
+    return false;
+  }
+
+  // Free reply message
+  dbus_message_unref(dbus_reply);
+
+  // Free message
+  dbus_message_unref(dbus_msg);
+  return true;
+}
+
+double Player::get_volume() {
+  if (!is_volume_prop) {
+    std::cerr << "This player does not compatible with Volume property!"
+              << std::endl;
+    return 0;
+  }
+  DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
       players[selected_player_id].c_str(), // Destination bus name
@@ -504,9 +741,10 @@ double Player::get_volume() {
 }
 
 bool Player::set_volume(double volume) {
-  if (dbus_error_is_set(&dbus_error)) {
-    printf("DBus error: %s\n", dbus_error.message);
-    return false;
+  if (!is_volume_prop) {
+    std::cerr << "This player does not compatible with Volume property!"
+              << std::endl;
+    return 0;
   }
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
@@ -562,8 +800,55 @@ bool Player::set_volume(double volume) {
   return true;
 }
 
+std::string Player::get_current_player_name() {
+  DBusMessage *dbus_msg, *dbus_reply;
+  // Compose remote procedure call
+  dbus_msg = dbus_message_new_method_call(
+      players[selected_player_id].c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",           // Object path
+      "org.freedesktop.DBus.Properties",   // Interface name
+      "Get");                              // Method name
+
+  if (!dbus_msg) {
+    std::cout << "Error creating message." << std::endl;
+    return "";
+  }
+  const char *interfaceName = "org.mpris.MediaPlayer2";
+  const char *propertyName = "Identity";
+  dbus_message_append_args(dbus_msg, DBUS_TYPE_STRING, &interfaceName,
+                           DBUS_TYPE_STRING, &propertyName, DBUS_TYPE_INVALID);
+
+  // Invoke remote procedure call, block for response
+  dbus_reply = dbus_connection_send_with_reply_and_block(
+      dbus_conn, dbus_msg, DBUS_TIMEOUT_USE_DEFAULT, &dbus_error);
+  if (!dbus_reply || dbus_error_is_set(&dbus_error)) {
+    std::cout << "Error getting reply: " << dbus_error.message << std::endl;
+    dbus_message_unref(dbus_msg);
+    return "";
+  }
+  // Extract the property value from the reply
+  DBusMessageIter iter;
+  dbus_message_iter_init(dbus_reply, &iter);
+  const char *signature = dbus_message_iter_get_signature(&iter);
+  if (strcmp(signature, "v") != 0) {
+    std::cout << "DBus message error: Invalid signature" << std::endl;
+    return "";
+  }
+  DBusMessageIter valueIter;
+  dbus_message_iter_recurse(&iter, &valueIter);
+  const char *identity;
+  dbus_message_iter_get_basic(&valueIter, &identity);
+
+  return identity;
+}
+
 std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
   DBusMessage *dbus_msg, *dbus_reply;
+  if (!is_metadata_prop) {
+    std::cerr << "This player does not compatible with Volume property!"
+              << std::endl;
+    return {};
+  }
   if (selected_player_id == -1) {
     std::cout << "get_metadata(): Player not selected, can't get metadata"
               << std::endl;
@@ -578,9 +863,6 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
 
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
-    dbus_connection_unref(dbus_conn);
-    std::string error_msg = dbus_error.message;
-    dbus_error_free(&dbus_error);
     return {};
   }
   const char *interfaceName = "org.mpris.MediaPlayer2.Player";
@@ -593,10 +875,6 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
       dbus_conn, dbus_msg, DBUS_TIMEOUT_USE_DEFAULT, &dbus_error);
   if (!dbus_reply || dbus_error_is_set(&dbus_error)) {
     std::cout << "Error getting reply: " << dbus_error.message << std::endl;
-    dbus_message_unref(dbus_msg);
-    dbus_connection_unref(dbus_conn);
-    std::string error_msg = dbus_error.message;
-    dbus_error_free(&dbus_error);
     return {};
   }
   std::vector<std::pair<std::string, std::string>> metadata;
@@ -626,11 +904,36 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
       // Get variant type
       int variant_type = dbus_message_iter_get_arg_type(&dict_entry_iter);
       // Add key-value pair to output vector if value is a string
-      if (variant_type == DBUS_TYPE_STRING) {
-        char *value_str;
-        dbus_message_iter_get_basic(&dict_entry_iter, &value_str);
-        metadata.push_back(
-            std::make_pair(std::string(key_str), std::string(value_str)));
+      if (variant_type == DBUS_TYPE_STRING ||
+          variant_type == DBUS_TYPE_OBJECT_PATH ||
+          variant_type == DBUS_TYPE_UINT32 || variant_type == DBUS_TYPE_INT32 ||
+          variant_type == DBUS_TYPE_INT64) {
+
+        if (variant_type == DBUS_TYPE_UINT32) {
+          unsigned int num;
+          dbus_message_iter_get_basic(&dict_entry_iter, &num);
+          std::string value_string = std::to_string(num);
+          metadata.push_back(
+              std::make_pair(std::string(key_str), value_string));
+        } else if (variant_type == DBUS_TYPE_INT32) {
+          int num;
+          dbus_message_iter_get_basic(&dict_entry_iter, &num);
+          std::string value_string = std::to_string(num);
+          metadata.push_back(
+              std::make_pair(std::string(key_str), value_string));
+        } else if (variant_type == DBUS_TYPE_INT64) {
+          int64_t num;
+          dbus_message_iter_get_basic(&dict_entry_iter, &num);
+          std::string value_string = std::to_string(num);
+          metadata.push_back(
+              std::make_pair(std::string(key_str), value_string));
+        } else {
+          char *value_str;
+          dbus_message_iter_get_basic(&dict_entry_iter, &value_str);
+
+          metadata.push_back(
+              std::make_pair(std::string(key_str), std::string(value_str)));
+        }
       }
       // Advance to next dictionary entry
       dbus_message_iter_next(&iter);
