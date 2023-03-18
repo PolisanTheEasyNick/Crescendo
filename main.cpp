@@ -8,7 +8,7 @@ int main() {
   player.print_players();
   std::cout << "Printing names" << std::endl;
   player.print_players_names();
-  player.select_player(0);
+  player.select_player(1);
   int input = -1;
   std::cout << "1. Play" << std::endl;
   std::cout << "2. Pause" << std::endl;
@@ -66,7 +66,7 @@ int main() {
       break;
     }
     case 10: {
-      player.set_position(30 * 1000000);
+      player.set_position(30);
       break;
     }
     case 11: {
