@@ -1266,3 +1266,27 @@ void Player::set_output_device(std::string output_sink_path) {
   pa_context_unref(context);
   pa_mainloop_free(mainloop);
 }
+
+bool Player::get_play_pause_method() const { return play_pause_method; }
+
+bool Player::get_pause_method() const { return pause_method; }
+
+bool Player::get_play_method() const { return play_method; }
+
+bool Player::get_next_method() const { return next_method; }
+
+bool Player::get_previous_method() const { return previous_method; }
+
+bool Player::get_setpos_method() const { return setpos_method; }
+
+bool Player::get_is_shuffle_prop() const { return is_shuffle_prop; }
+
+bool Player::get_is_pos_prop() const { return is_pos_prop; }
+
+bool Player::get_is_volume_prop() const { return is_volume_prop; }
+
+bool Player::get_is_playback_status_prop() const {
+  return is_playback_status_prop;
+}
+
+bool Player::get_is_metadata_prop() const { return is_metadata_prop; }

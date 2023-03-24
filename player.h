@@ -50,6 +50,18 @@ public:
   std::vector<std::pair<std::string, std::string>> get_metadata();
   std::vector<std::pair<std::string, std::string>> get_output_devices();
   void set_output_device(std::string sink_name);
+
+  bool get_play_pause_method() const;
+  bool get_pause_method() const;
+  bool get_play_method() const;
+  bool get_next_method() const;
+  bool get_previous_method() const;
+  bool get_setpos_method() const;
+  bool get_is_shuffle_prop() const;
+  bool get_is_pos_prop() const;
+  bool get_is_volume_prop() const;
+  bool get_is_playback_status_prop() const;
+  bool get_is_metadata_prop() const;
 };
 
 #endif // PLAYER_H

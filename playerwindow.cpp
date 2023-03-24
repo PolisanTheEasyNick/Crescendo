@@ -73,22 +73,72 @@ PlayerWindow::PlayerWindow() {
   main_grid.attach(song_name, 0, 1);
   playpause.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_playpause_clicked));
-
+  prev.signal_clicked().connect(
+      sigc::mem_fun(*this, &PlayerWindow::on_prev_clicked));
+  next.signal_clicked().connect(
+      sigc::mem_fun(*this, &PlayerWindow::on_next_clicked));
+  shuffle.signal_clicked().connect(
+      sigc::mem_fun(*this, &PlayerWindow::on_shuffle_clicked));
+  player_choose.signal_clicked().connect(
+      sigc::mem_fun(*this, &PlayerWindow::on_player_choose_clicked));
+  device_choose.signal_clicked().connect(
+      sigc::mem_fun(*this, &PlayerWindow::on_device_choose_clicked));
   main_grid.attach(control_buttons, 1, 1);
   main_grid.attach(volume_and_player, 2, 1);
   main_grid.attach(progress_bar_song, 0, 0, 3, 1);
+
+  check_buttons_features();
 }
 
-void PlayerWindow::on_playpause_clicked() {
-  song_name.set_label("You clicked!");
+void PlayerWindow::on_playpause_clicked() { player.send_play_pause(); }
+
+void PlayerWindow::on_prev_clicked() { player.send_previous(); }
+
+void PlayerWindow::on_next_clicked() { player.send_next(); }
+
+void PlayerWindow::on_shuffle_clicked() {
+  bool current_shuffle = player.get_shuffle();
+  player.set_shuffle(!current_shuffle);
 }
 
-void PlayerWindow::on_prev_clicked() { song_name.set_label("You clicked!"); }
+void PlayerWindow::on_player_choose_clicked() {}
 
-void PlayerWindow::on_next_clicked() { song_name.set_label("You clicked!"); }
+void PlayerWindow::on_device_choose_clicked() {}
 
-void PlayerWindow::on_shuffle_clicked() { song_name.set_label("You clicked!"); }
-
-void PlayerWindow::on_player_choose_clicked() {
-  song_name.set_label("You clicked!");
+void PlayerWindow::check_buttons_features() {
+  if (player.get_play_pause_method()) {
+    playpause.set_sensitive(true);
+  } else {
+    playpause.set_sensitive(false);
+  }
+  if (player.get_next_method()) {
+    next.set_sensitive(true);
+  } else {
+    next.set_sensitive(false);
+  }
+  if (player.get_previous_method()) {
+    prev.set_sensitive(true);
+  } else {
+    prev.set_sensitive(false);
+  }
+  if (player.get_setpos_method()) {
+    progress_bar_song.set_sensitive(true);
+  } else {
+    progress_bar_song.set_sensitive(false);
+  }
+  if (player.get_is_shuffle_prop()) {
+    shuffle.set_sensitive(true);
+  } else {
+    shuffle.set_sensitive(false);
+  }
+  if (player.get_is_pos_prop()) {
+    // update time of song
+  } else {
+    // not update time of song
+  }
+  if (player.get_is_volume_prop()) {
+    volume_bar.set_sensitive(true);
+  } else {
+    volume_bar.set_sensitive(false);
+  }
 }

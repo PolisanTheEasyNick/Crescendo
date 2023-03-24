@@ -20,13 +20,17 @@ public:
 protected:
   Player player;
   void on_playpause_clicked(), on_prev_clicked(), on_next_clicked(),
-      on_shuffle_clicked(), on_player_choose_clicked();
+      on_shuffle_clicked(), on_player_choose_clicked(),
+      on_device_choose_clicked();
   Gtk::Grid main_grid;
   Gtk::Box control_buttons, volume_and_player;
   Gtk::Button playpause, prev, next, shuffle, player_choose, device_choose;
   Gtk::Label song_name;
   Gtk::Scale progress_bar_song;
   Gtk::VolumeButton volume_bar;
+
+private:
+  void check_buttons_features();
 };
 
 #endif // PLAYERWINDOW_H
