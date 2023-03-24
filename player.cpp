@@ -1,11 +1,18 @@
 #include "player.h"
 
 Player::Player() {
+  std::cout << "Start constructor Player" << std::endl;
   // Initialize D-Bus error
   dbus_error_init(&dbus_error);
   // Connect to D-Bus
   dbus_conn = dbus_bus_get(DBUS_BUS_SESSION, &dbus_error);
   get_players();
+  if (players.size() != 0) {
+    if (select_player(1)) {
+      std::cout << "Selected player: " << players[selected_player_id].first
+                << " at " << players[selected_player_id].second << std::endl;
+    };
+  }
 }
 
 Player::~Player() {
@@ -503,7 +510,7 @@ bool Player::get_shuffle() {
   }
   DBusMessage *dbus_msg, *dbus_reply;
   if (selected_player_id == -1) {
-    std::cout << "get_metadata(): Player not selected, can't get metadata"
+    std::cout << "get_shuffle(): Player not selected, can't get shuffle"
               << std::endl;
     return false;
   }
@@ -692,9 +699,6 @@ bool Player::set_position(int64_t pos) {
     }
   }
   DBusMessageIter iter;
-  if (players[selected_player_id].second == "org.mpris.MediaPlayer2.spotify") {
-    pos = pos * 1000000;
-  }
   dbus_message_iter_init_append(dbus_msg, &iter);
   if (!dbus_message_iter_append_basic(&iter, DBUS_TYPE_OBJECT_PATH, &trackid) ||
       !dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT64, &pos)) {
@@ -884,10 +888,12 @@ std::string Player::get_current_player_name() {
   return identity;
 }
 
+inline const char *const bool_to_string(bool b) { return b ? "true" : "false"; }
+
 std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
   DBusMessage *dbus_msg, *dbus_reply;
   if (!is_metadata_prop) {
-    std::cerr << "This player does not compatible with Volume property!"
+    std::cerr << "This player does not compatible with Metadata property!"
               << std::endl;
     return {};
   }
@@ -946,35 +952,106 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
       // Get variant type
       int variant_type = dbus_message_iter_get_arg_type(&dict_entry_iter);
       // Add key-value pair to output vector if value is a string
-      if (variant_type == DBUS_TYPE_STRING ||
-          variant_type == DBUS_TYPE_OBJECT_PATH ||
-          variant_type == DBUS_TYPE_UINT32 || variant_type == DBUS_TYPE_INT32 ||
-          variant_type == DBUS_TYPE_INT64) {
-
-        if (variant_type == DBUS_TYPE_UINT32) {
-          unsigned int num;
+      if (variant_type != DBUS_TYPE_INVALID &&
+          variant_type != DBUS_TYPE_SIGNATURE &&
+          variant_type != DBUS_TYPE_ARRAY) {
+        switch (variant_type) {
+        case DBUS_TYPE_INT16: {
+          short num;
           dbus_message_iter_get_basic(&dict_entry_iter, &num);
           std::string value_string = std::to_string(num);
           metadata.push_back(
               std::make_pair(std::string(key_str), value_string));
-        } else if (variant_type == DBUS_TYPE_INT32) {
+          break;
+        }
+        case DBUS_TYPE_UINT16: {
+          unsigned short num;
+          dbus_message_iter_get_basic(&dict_entry_iter, &num);
+          std::string value_string = std::to_string(num);
+          metadata.push_back(
+              std::make_pair(std::string(key_str), value_string));
+          break;
+        }
+        case DBUS_TYPE_INT32: {
           int num;
           dbus_message_iter_get_basic(&dict_entry_iter, &num);
           std::string value_string = std::to_string(num);
           metadata.push_back(
               std::make_pair(std::string(key_str), value_string));
-        } else if (variant_type == DBUS_TYPE_INT64) {
+          break;
+        }
+        case DBUS_TYPE_UINT32: {
+          unsigned int num;
+          dbus_message_iter_get_basic(&dict_entry_iter, &num);
+          std::string value_string = std::to_string(num);
+          metadata.push_back(
+              std::make_pair(std::string(key_str), value_string));
+          break;
+        }
+        case DBUS_TYPE_INT64: {
           int64_t num;
           dbus_message_iter_get_basic(&dict_entry_iter, &num);
           std::string value_string = std::to_string(num);
           metadata.push_back(
               std::make_pair(std::string(key_str), value_string));
-        } else {
+          break;
+        }
+        case DBUS_TYPE_UINT64: {
+          uint64_t num;
+          dbus_message_iter_get_basic(&dict_entry_iter, &num);
+          std::string value_string = std::to_string(num);
+          metadata.push_back(
+              std::make_pair(std::string(key_str), value_string));
+          break;
+        }
+        case DBUS_TYPE_DOUBLE: {
+          double num;
+          dbus_message_iter_get_basic(&dict_entry_iter, &num);
+          std::string value_string = std::to_string(num);
+          metadata.push_back(
+              std::make_pair(std::string(key_str), value_string));
+          break;
+        }
+        case DBUS_TYPE_BYTE: {
+          std::byte num;
+          dbus_message_iter_get_basic(&dict_entry_iter, &num);
+          // create a char* pointer and assign it the address of the byte
+          char *char_ptr = reinterpret_cast<char *>(&num);
+          // create a stringstream and insert the byte as a hex value
+          std::stringstream ss;
+          ss << std::hex << std::setfill('0') << std::setw(2)
+             << static_cast<int>(*char_ptr);
+          metadata.push_back(std::make_pair(std::string(key_str), ss.str()));
+          break;
+        }
+        case DBUS_TYPE_STRING: {
           char *value_str;
           dbus_message_iter_get_basic(&dict_entry_iter, &value_str);
 
           metadata.push_back(
               std::make_pair(std::string(key_str), std::string(value_str)));
+          break;
+        }
+        case DBUS_TYPE_OBJECT_PATH: {
+          char *value_str;
+          dbus_message_iter_get_basic(&dict_entry_iter, &value_str);
+
+          metadata.push_back(
+              std::make_pair(std::string(key_str), std::string(value_str)));
+          break;
+        }
+        case DBUS_TYPE_BOOLEAN: {
+          bool value;
+          dbus_message_iter_get_basic(&dict_entry_iter, &value);
+
+          metadata.push_back(std::make_pair(
+              std::string(key_str), std::string(bool_to_string(value))));
+          break;
+        }
+        default: {
+          std::cout << "Warning: Metadata Unknown type: " << (char)variant_type
+                    << std::endl;
+        }
         }
       }
       // Advance to next dictionary entry

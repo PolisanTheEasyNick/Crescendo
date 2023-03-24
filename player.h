@@ -3,9 +3,11 @@
 #include "pugixml.hpp"
 #include <cstring>
 #include <dbus/dbus.h>
+#include <iomanip>
 #include <iostream>
 #include <pulse/proplist.h>
 #include <pulse/pulseaudio.h>
+#include <sstream>
 #include <vector>
 
 class Player {
@@ -48,13 +50,6 @@ public:
   std::vector<std::pair<std::string, std::string>> get_metadata();
   std::vector<std::pair<std::string, std::string>> get_output_devices();
   void set_output_device(std::string sink_name);
-  // TODO
-  /* 1. Check for abilities for checked player. Many bools with writed abilities
-   * paths?
-   * 2. GUI........
-   * 3. Ability to find sound devices and switch between them
-   *
-   */
 };
 
 #endif // PLAYER_H
