@@ -87,6 +87,15 @@ PlayerWindow::PlayerWindow() {
   main_grid.attach(volume_and_player, 2, 1);
   main_grid.attach(progress_bar_song, 0, 0, 3, 1);
 
+  // add shuffle css for changing colors if shuffle enabled
+  //  Create a CSS provider and load a stylesheet
+  auto css_provider = Gtk::CssProvider::create();
+  css_provider->load_from_data(".shuffle-enabled {\n"
+                               "  background-color: green;\n"
+                               "}\n");
+  // Apply the stylesheet to our custom widget
+  shuffle.get_style_context()->add_provider(css_provider, 600);
+  // check if buttons accessible or not
   check_buttons_features();
 }
 
@@ -99,6 +108,16 @@ void PlayerWindow::on_next_clicked() { player.send_next(); }
 void PlayerWindow::on_shuffle_clicked() {
   bool current_shuffle = player.get_shuffle();
   player.set_shuffle(!current_shuffle);
+  current_shuffle = player.get_shuffle();
+  if (current_shuffle) {
+    shuffle.set_state_flags(Gtk::StateFlags::ACTIVE, true);
+    auto style_context = shuffle.get_style_context();
+    style_context->remove_class("shuffle-enabled");
+  } else {
+    shuffle.set_state_flags(Gtk::StateFlags::ACTIVE, false);
+    auto style_context = shuffle.get_style_context();
+    style_context->add_class("shuffle-enabled");
+  }
 }
 
 void PlayerWindow::on_player_choose_clicked() {}

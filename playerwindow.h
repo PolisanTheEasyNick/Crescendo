@@ -6,6 +6,7 @@
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
+#include <gtkmm/cssprovider.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/grid.h>
 #include <gtkmm/label.h>
