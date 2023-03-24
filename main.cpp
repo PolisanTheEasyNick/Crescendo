@@ -1,14 +1,23 @@
+#include "gtkmm/application.h"
 #include "helper.h"
 #include "player.h"
+#include "playerwindow.h"
 #include <iostream>
 
-int main() {
+int main(int argc, char *argv[]) {
   Player player;
+  auto app = Gtk::Application::create("org.polisan.player");
+  // return app->make_window_and_run<PlayerWindow>(argc, argv);
   std::cout << "Printing players" << std::endl;
   player.print_players();
   std::cout << "Printing names" << std::endl;
   player.print_players_names();
   player.select_player(1);
+  std::cout << "Printing sound devices" << std::endl;
+  player.get_output_devices();
+  std::cout << "Set sound devices" << std::endl;
+  auto devices = player.get_output_devices();
+  player.set_output_device(devices[1].second);
   int input = -1;
   std::cout << "1. Play" << std::endl;
   std::cout << "2. Pause" << std::endl;

@@ -4,11 +4,13 @@
 #include <cstring>
 #include <dbus/dbus.h>
 #include <iostream>
+#include <pulse/proplist.h>
+#include <pulse/pulseaudio.h>
 #include <vector>
 
 class Player {
 private:
-  std::vector<std::string> players;
+  std::vector<std::pair<std::string, std::string>> players, devices;
   DBusConnection *dbus_conn = nullptr;
   DBusError dbus_error;
   unsigned int selected_player_id = -1;
@@ -27,7 +29,7 @@ private:
 public:
   Player();
   ~Player();
-  bool get_players(); // get players and write it into players vector
+  std::vector<std::pair<std::string, std::string>> get_players();
   void print_players();
   void print_players_names();
   bool select_player(unsigned int id); // select player id
@@ -44,6 +46,8 @@ public:
   bool set_volume(double volume);
   std::string get_current_player_name();
   std::vector<std::pair<std::string, std::string>> get_metadata();
+  std::vector<std::pair<std::string, std::string>> get_output_devices();
+  void set_output_device(std::string sink_name);
   // TODO
   /* 1. Check for abilities for checked player. Many bools with writed abilities
    * paths?

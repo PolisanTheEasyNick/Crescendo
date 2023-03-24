@@ -13,10 +13,10 @@ Player::~Player() {
   dbus_error_free(&dbus_error);
 }
 
-bool Player::get_players() {
+std::vector<std::pair<std::string, std::string>> Player::get_players() {
   if (dbus_error_is_set(&dbus_error)) {
     printf("DBus error: %s\n", dbus_error.message);
-    return false;
+    return {};
   }
   std::cout << "Connected to D-Bus as \"" << dbus_bus_get_unique_name(dbus_conn)
             << "\"." << std::endl;
@@ -27,7 +27,7 @@ bool Player::get_players() {
                                           "org.freedesktop.DBus", "ListNames");
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
-    return false;
+    return {};
   }
   // Invoke remote procedure call, block for response
   dbus_reply = dbus_connection_send_with_reply_and_block(
@@ -35,7 +35,7 @@ bool Player::get_players() {
 
   if (!dbus_reply) {
     fprintf(stderr, "Error getting reply: %s\n", dbus_error.message);
-    return false;
+    return {};
   }
 
   DBusMessageIter iter;
@@ -61,24 +61,63 @@ bool Player::get_players() {
       // Check if this service implements the MediaPlayer2 interface
       // std::cout << "Checking " << name << std::endl;
       if (strstr(name, "org.mpris.MediaPlayer2.") == name) {
-        printf("Found media player: %s\n", name);
-        players.push_back(name);
+        std::cout << "Found media player: " << name << std::endl;
+        // trying to get identity
+        const char *identity;
+        // Compose remote procedure call
+        dbus_msg = dbus_message_new_method_call(
+            name,                              // Destination bus name
+            "/org/mpris/MediaPlayer2",         // Object path
+            "org.freedesktop.DBus.Properties", // Interface name
+            "Get");                            // Method name
+
+        if (!dbus_msg) {
+          std::cout << "Error creating message." << std::endl;
+        }
+        const char *interfaceName = "org.mpris.MediaPlayer2";
+        const char *propertyName = "Identity";
+        dbus_message_append_args(dbus_msg, DBUS_TYPE_STRING, &interfaceName,
+                                 DBUS_TYPE_STRING, &propertyName,
+                                 DBUS_TYPE_INVALID);
+
+        // Invoke remote procedure call, block for response
+        dbus_reply = dbus_connection_send_with_reply_and_block(
+            dbus_conn, dbus_msg, DBUS_TIMEOUT_USE_DEFAULT, &dbus_error);
+        if (!dbus_reply || dbus_error_is_set(&dbus_error)) {
+          std::cout << "Error getting reply: " << dbus_error.message
+                    << std::endl;
+          dbus_message_unref(dbus_msg);
+        }
+        // Extract the property value from the reply
+        DBusMessageIter iter;
+        dbus_message_iter_init(dbus_reply, &iter);
+        const char *signature = dbus_message_iter_get_signature(&iter);
+        if (strcmp(signature, "v") != 0) {
+          std::cout << "DBus message error: Invalid signature" << std::endl;
+        }
+        DBusMessageIter valueIter;
+        dbus_message_iter_recurse(&iter, &valueIter);
+        dbus_message_iter_get_basic(&valueIter, &identity);
+
+        // Print the "Identity" property value
+        std::cout << "Identity: " << identity << std::endl;
+        players.push_back(std::make_pair(std::string(identity), name));
       }
     }
   }
 
   if (players.empty()) {
     std::cout << "No media players found." << std::endl;
-    return false;
+    return {};
   }
   dbus_message_unref(dbus_msg);
   dbus_message_unref(dbus_reply);
-  return true;
+  return players;
 }
 
 void Player::print_players() {
   for (auto &player : players) {
-    std::cout << player << std::endl;
+    std::cout << player.first << ": " << player.second << std::endl;
   }
 }
 
@@ -87,7 +126,7 @@ void Player::print_players_names() {
     DBusMessage *dbus_msg, *dbus_reply;
     // Compose remote procedure call
     dbus_msg = dbus_message_new_method_call(
-        player.c_str(),                    // Destination bus name
+        player.second.c_str(),             // Destination bus name
         "/org/mpris/MediaPlayer2",         // Object path
         "org.freedesktop.DBus.Properties", // Interface name
         "Get");                            // Method name
@@ -143,7 +182,7 @@ bool Player::select_player(unsigned int new_id) {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), "/org/mpris/MediaPlayer2",
+      players[selected_player_id].second.c_str(), "/org/mpris/MediaPlayer2",
       "org.freedesktop.DBus.Introspectable", "Introspect");
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -355,7 +394,7 @@ bool Player::send_play_pause() {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), "/org/mpris/MediaPlayer2",
+      players[selected_player_id].second.c_str(), "/org/mpris/MediaPlayer2",
       "org.mpris.MediaPlayer2.Player", "PlayPause");
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -377,7 +416,7 @@ bool Player::send_pause() {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), "/org/mpris/MediaPlayer2",
+      players[selected_player_id].second.c_str(), "/org/mpris/MediaPlayer2",
       "org.mpris.MediaPlayer2.Player", "Pause");
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -399,7 +438,7 @@ bool Player::send_play() {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), "/org/mpris/MediaPlayer2",
+      players[selected_player_id].second.c_str(), "/org/mpris/MediaPlayer2",
       "org.mpris.MediaPlayer2.Player", "Play");
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -421,7 +460,7 @@ bool Player::send_next() {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), "/org/mpris/MediaPlayer2",
+      players[selected_player_id].second.c_str(), "/org/mpris/MediaPlayer2",
       "org.mpris.MediaPlayer2.Player", "Next");
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -443,7 +482,7 @@ bool Player::send_previous() {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), "/org/mpris/MediaPlayer2",
+      players[selected_player_id].second.c_str(), "/org/mpris/MediaPlayer2",
       "org.mpris.MediaPlayer2.Player", "Previous");
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -470,10 +509,10 @@ bool Player::get_shuffle() {
   }
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), // Destination bus name
-      "/org/mpris/MediaPlayer2",           // Object path
-      "org.freedesktop.DBus.Properties",   // Interface name
-      "Get");                              // Method name
+      players[selected_player_id].second.c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",                  // Object path
+      "org.freedesktop.DBus.Properties",          // Interface name
+      "Get");                                     // Method name
 
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -517,10 +556,10 @@ bool Player::set_shuffle(bool isShuffle) {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), // Destination bus name
-      "/org/mpris/MediaPlayer2",           // Object path
-      "org.freedesktop.DBus.Properties",   // Interface name
-      "Set");                              // Method name
+      players[selected_player_id].second.c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",                  // Object path
+      "org.freedesktop.DBus.Properties",          // Interface name
+      "Set");                                     // Method name
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
     return false;
@@ -549,7 +588,8 @@ bool Player::set_shuffle(bool isShuffle) {
   }
 
   // Set destination bus name
-  dbus_message_set_destination(dbus_msg, players[selected_player_id].c_str());
+  dbus_message_set_destination(dbus_msg,
+                               players[selected_player_id].second.c_str());
 
   // Invoke remote procedure call, block for response
   dbus_reply = dbus_connection_send_with_reply_and_block(
@@ -579,10 +619,10 @@ int64_t Player::get_position() {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), // Destination bus name
-      "/org/mpris/MediaPlayer2",           // Object path
-      "org.freedesktop.DBus.Properties",   // Interface name
-      "Get");                              // Method name
+      players[selected_player_id].second.c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",                  // Object path
+      "org.freedesktop.DBus.Properties",          // Interface name
+      "Get");                                     // Method name
 
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -634,10 +674,10 @@ bool Player::set_position(int64_t pos) {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), // Destination bus name
-      "/org/mpris/MediaPlayer2",           // Object path
-      "org.mpris.MediaPlayer2.Player",     // Interface name
-      "SetPosition");                      // Method name
+      players[selected_player_id].second.c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",                  // Object path
+      "org.mpris.MediaPlayer2.Player",            // Interface name
+      "SetPosition");                             // Method name
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
     return false;
@@ -652,7 +692,7 @@ bool Player::set_position(int64_t pos) {
     }
   }
   DBusMessageIter iter;
-  if (players[selected_player_id] == "org.mpris.MediaPlayer2.spotify") {
+  if (players[selected_player_id].second == "org.mpris.MediaPlayer2.spotify") {
     pos = pos * 1000000;
   }
   dbus_message_iter_init_append(dbus_msg, &iter);
@@ -664,7 +704,8 @@ bool Player::set_position(int64_t pos) {
     return false;
   }
   // Set destination bus name
-  dbus_message_set_destination(dbus_msg, players[selected_player_id].c_str());
+  dbus_message_set_destination(dbus_msg,
+                               players[selected_player_id].second.c_str());
 
   // Invoke remote procedure call, block for response
   dbus_reply = dbus_connection_send_with_reply_and_block(
@@ -694,10 +735,10 @@ double Player::get_volume() {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), // Destination bus name
-      "/org/mpris/MediaPlayer2",           // Object path
-      "org.freedesktop.DBus.Properties",   // Interface name
-      "Get");                              // Method name
+      players[selected_player_id].second.c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",                  // Object path
+      "org.freedesktop.DBus.Properties",          // Interface name
+      "Get");                                     // Method name
 
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -749,10 +790,10 @@ bool Player::set_volume(double volume) {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), // Destination bus name
-      "/org/mpris/MediaPlayer2",           // Object path
-      "org.freedesktop.DBus.Properties",   // Interface name
-      "Set");                              // Method name
+      players[selected_player_id].second.c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",                  // Object path
+      "org.freedesktop.DBus.Properties",          // Interface name
+      "Set");                                     // Method name
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
     return false;
@@ -779,7 +820,8 @@ bool Player::set_volume(double volume) {
   }
 
   // Set destination bus name
-  dbus_message_set_destination(dbus_msg, players[selected_player_id].c_str());
+  dbus_message_set_destination(dbus_msg,
+                               players[selected_player_id].second.c_str());
 
   // Invoke remote procedure call, block for response
   dbus_reply = dbus_connection_send_with_reply_and_block(
@@ -804,10 +846,10 @@ std::string Player::get_current_player_name() {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), // Destination bus name
-      "/org/mpris/MediaPlayer2",           // Object path
-      "org.freedesktop.DBus.Properties",   // Interface name
-      "Get");                              // Method name
+      players[selected_player_id].second.c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",                  // Object path
+      "org.freedesktop.DBus.Properties",          // Interface name
+      "Get");                                     // Method name
 
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -856,10 +898,10 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
   }
   // Compose remote procedure call
   dbus_msg = dbus_message_new_method_call(
-      players[selected_player_id].c_str(), // Destination bus name
-      "/org/mpris/MediaPlayer2",           // Object path
-      "org.freedesktop.DBus.Properties",   // Interface name
-      "Get");                              // Method name
+      players[selected_player_id].second.c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",                  // Object path
+      "org.freedesktop.DBus.Properties",          // Interface name
+      "Get");                                     // Method name
 
   if (!dbus_msg) {
     std::cout << "Error creating message." << std::endl;
@@ -942,4 +984,208 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
     std::cerr << "Metadata property is not a variant" << std::endl;
   }
   return metadata;
+}
+
+std::vector<std::pair<std::string, std::string>> Player::get_output_devices() {
+#ifdef HAVE_PULSEAUDIO
+  // Code thatuse PulseAudio
+  std::cout << "PulseAudio installed" << std::endl;
+#else
+  // Code that doesn't uses PulseAudio
+  std::cout << "PulseAudio not installed, can't continue." << std::endl;
+  return false;
+#endif
+  devices.clear();
+  // Create a main loop and a new PulseAudio context
+  pa_mainloop *mainloop = pa_mainloop_new();
+  pa_context *context =
+      pa_context_new(pa_mainloop_get_api(mainloop), "check_sinks");
+
+  // Connect to the PulseAudio server
+  pa_context_connect(context, NULL, PA_CONTEXT_NOFAIL, NULL);
+
+  // Wait for the context to be ready
+  while (pa_context_get_state(context) != PA_CONTEXT_READY) {
+    pa_mainloop_iterate(mainloop, true, NULL);
+  }
+
+  // Get the list of sink devices
+  pa_operation *operation = pa_context_get_sink_info_list(
+      context,
+      [](pa_context *context, const pa_sink_info *info, int eol,
+         void *userdata) {
+        if (eol < 0) {
+          // Error
+          std::cerr << "Failed to get sink info list: "
+                    << pa_strerror(pa_context_errno(context)) << std::endl;
+          pa_context_disconnect(context);
+        } else if (eol == 0) {
+          // Sink device
+          auto devices =
+              static_cast<std::vector<std::pair<std::string, std::string>> *>(
+                  userdata);
+          devices->emplace_back(info->description, info->name);
+        }
+      },
+      &devices);
+  if (!operation) {
+    std::cerr << "Failed to get sink info list." << std::endl;
+    pa_context_disconnect(context);
+    pa_mainloop_free(mainloop);
+    return {};
+  }
+
+  // Wait for the operation to complete
+  while (pa_operation_get_state(operation) == PA_OPERATION_RUNNING) {
+    pa_mainloop_iterate(mainloop, true, NULL);
+  }
+
+  for (auto &device : devices) {
+    std::cout << "Sink name: " << device.first << std::endl;
+    std::cout << "Sink description: " << device.second << std::endl;
+  }
+
+  pa_context_disconnect(context);
+  pa_context_unref(context);
+  pa_mainloop_free(mainloop);
+
+  return devices;
+}
+
+void Player::set_output_device(std::string output_sink_path) {
+#ifdef HAVE_PULSEAUDIO
+  // Code thatuse PulseAudio
+  std::cout << "PulseAudio installed" << std::endl;
+#else
+  // Code that doesn't uses PulseAudio
+  std::cout << "PulseAudio not installed, can't continue." << std::endl;
+  return false;
+#endif
+  DBusMessage *dbus_msg, *dbus_reply;
+  static uint32_t *proc_id = 0;
+  dbus_msg = dbus_message_new_method_call(
+      "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+      "GetConnectionUnixProcessID");
+  const char *interface_name = players[selected_player_id].second.c_str();
+  if (!dbus_message_append_args(dbus_msg, DBUS_TYPE_STRING, &interface_name,
+                                DBUS_TYPE_INVALID)) {
+    std::cout << "Error while appending to message" << std::endl;
+    proc_id = 0;
+  }
+
+  dbus_reply = dbus_connection_send_with_reply_and_block(dbus_conn, dbus_msg,
+                                                         -1, &dbus_error);
+
+  // Get the ProcessID for player from the reply message
+  DBusMessageIter iter;
+
+  if (dbus_message_iter_init(dbus_reply, &iter) &&
+      dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_UINT32) {
+    dbus_message_iter_get_basic(&iter, &proc_id);
+  }
+
+  std::cout << "proc_id: " << proc_id << std::endl;
+
+  // Create a main loop object
+  pa_mainloop *mainloop = pa_mainloop_new();
+
+  // Create a new PulseAudio context
+  pa_context *context =
+      pa_context_new(pa_mainloop_get_api(mainloop), "example");
+
+  // Connect to the PulseAudio server
+  if (pa_context_connect(context, NULL, PA_CONTEXT_NOFLAGS, NULL) < 0) {
+    std::cerr << "pa_context_connect() failed: "
+              << pa_strerror(pa_context_errno(context)) << std::endl;
+    pa_context_unref(context);
+    pa_mainloop_free(mainloop);
+    return;
+  }
+
+  // Wait for the context to be ready
+  while (pa_context_get_state(context) != PA_CONTEXT_READY) {
+    pa_mainloop_iterate(mainloop, true, NULL);
+  }
+  static int sink_id = -1;
+  // Get the list of sink devices
+  static std::string player_name = players[selected_player_id].first;
+  pa_operation *operation = pa_context_get_sink_input_info_list(
+      context,
+      [](pa_context *context, const pa_sink_input_info *info, int eol,
+         void *userdata) {
+        if (eol == 0) {
+          std::cout << "Sink input #" << info->index << ":" << std::endl;
+          std::cout << "    Name: " << info->name << std::endl;
+          std::cout << "    Application name: "
+                    << pa_proplist_gets(info->proplist, "application.name")
+                    << std::endl;
+          std::cout << "    Client index: " << info->client << std::endl;
+          std::cout << "    Sink index: " << info->sink << std::endl;
+          std::cout << "    App Binary: "
+                    << pa_proplist_gets(info->proplist,
+                                        "application.process.binary")
+                    << std::endl;
+          std::cout << "    Process id: "
+                    << pa_proplist_gets(info->proplist,
+                                        "application.process.id")
+                    << std::endl;
+          std::cout << "comparing \""
+                    << pa_proplist_gets(info->proplist, "application.name")
+                    << "\" and \"" << player_name << "\"" << std::endl;
+          char player_proc_id_str[10];
+          std::memset(player_proc_id_str, 0, sizeof(player_proc_id_str));
+          std::cout << "procid: " << player_proc_id_str << std::endl;
+          if (strcmp(pa_proplist_gets(info->proplist, "application.process.id"),
+                     player_proc_id_str) == 0 ||
+              strcmp(pa_proplist_gets(info->proplist, "application.name"),
+                     player_name.c_str()) == 0) {
+            std::cout << "Found current player: " << player_name << ". #"
+                      << info->sink << std::endl;
+            int *sink_id = static_cast<int *>(userdata);
+            *sink_id = info->index;
+            // info->client
+            return;
+          }
+        }
+      },
+      &sink_id);
+  if (!operation) {
+    std::cerr << "Failed to get player sink." << std::endl;
+    pa_context_disconnect(context);
+    pa_mainloop_free(mainloop);
+    return;
+  }
+
+  // Wait for the operation to complete
+  while (pa_operation_get_state(operation) == PA_OPERATION_RUNNING) {
+    pa_mainloop_iterate(mainloop, true, NULL);
+  }
+
+  if (sink_id == -1) {
+    std::cout << "Not found player sink. Can't continue." << std::endl;
+    return;
+  }
+
+  std::cout << "Trying to change output device for sink " << sink_id << " to "
+            << output_sink_path << std::endl;
+  static const std::string output_sink_path_copy = output_sink_path;
+
+  // Get the list of sink devices
+  pa_operation *operation2 = pa_context_move_sink_input_by_name(
+      context, sink_id, output_sink_path_copy.c_str(), NULL, NULL);
+  if (!operation2) {
+    std::cout << "Failed to set sink output device." << std::endl;
+    pa_context_disconnect(context);
+    pa_mainloop_free(mainloop);
+    return;
+  }
+  // Wait for the operation to complete
+  while (pa_operation_get_state(operation2) == PA_OPERATION_RUNNING) {
+    pa_mainloop_iterate(mainloop, true, NULL);
+  }
+  pa_operation_unref(operation);
+  pa_operation_unref(operation2);
+  pa_context_disconnect(context);
+  pa_context_unref(context);
+  pa_mainloop_free(mainloop);
 }
