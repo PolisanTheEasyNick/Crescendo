@@ -8,7 +8,7 @@ Player::Player() {
   dbus_conn = dbus_bus_get(DBUS_BUS_SESSION, &dbus_error);
   get_players();
   if (players.size() != 0) {
-    if (select_player(1)) {
+    if (select_player(0)) {
       std::cout << "Selected player: " << players[selected_player_id].first
                 << " at " << players[selected_player_id].second << std::endl;
     };
@@ -21,6 +21,7 @@ Player::~Player() {
 }
 
 std::vector<std::pair<std::string, std::string>> Player::get_players() {
+  players.clear();
   if (dbus_error_is_set(&dbus_error)) {
     printf("DBus error: %s\n", dbus_error.message);
     return {};
@@ -1290,3 +1291,5 @@ bool Player::get_is_playback_status_prop() const {
 }
 
 bool Player::get_is_metadata_prop() const { return is_metadata_prop; }
+
+unsigned int Player::get_count_of_players() const { return players.size(); }

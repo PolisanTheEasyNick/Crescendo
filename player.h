@@ -62,6 +62,7 @@ public:
   bool get_is_volume_prop() const;
   bool get_is_playback_status_prop() const;
   bool get_is_metadata_prop() const;
+  unsigned int get_count_of_players() const;
 };
 
 #endif // PLAYER_H
