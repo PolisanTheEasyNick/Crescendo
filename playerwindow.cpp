@@ -8,36 +8,36 @@ PlayerWindow::PlayerWindow() {
   main_grid.set_column_homogeneous(true);
   main_grid.set_margin(20);
 
-  shuffle.set_icon_name("media-playlist-shuffle");
-  prev.set_icon_name("media-skip-backward");
-  playpause.set_icon_name("media-playback-pause");
-  next.set_icon_name("media-skip-forward");
+  shuffle_button.set_icon_name("media-playlist-shuffle");
+  prev_button.set_icon_name("media-skip-backward");
+  playpause_button.set_icon_name("media-playback-pause");
+  next_button.set_icon_name("media-skip-forward");
 
-  control_buttons.set_orientation(Gtk::Orientation::HORIZONTAL);
-  control_buttons.set_halign(Gtk::Align::CENTER);
-  control_buttons.set_valign(Gtk::Align::CENTER);
-  control_buttons.set_spacing(5);
-  control_buttons.append(shuffle);
-  control_buttons.append(prev);
-  control_buttons.append(playpause);
-  control_buttons.append(next);
+  control_buttons_box.set_orientation(Gtk::Orientation::HORIZONTAL);
+  control_buttons_box.set_halign(Gtk::Align::CENTER);
+  control_buttons_box.set_valign(Gtk::Align::CENTER);
+  control_buttons_box.set_spacing(5);
+  control_buttons_box.append(shuffle_button);
+  control_buttons_box.append(prev_button);
+  control_buttons_box.append(playpause_button);
+  control_buttons_box.append(next_button);
 
-  device_choose.set_icon_name("multimedia-player");
-  player_choose.set_icon_name("audio-headphones");
+  device_choose_button.set_icon_name("audio-headphones");
+  player_choose_button.set_icon_name("multimedia-player");
 
-  volume_bar.set_orientation(Gtk::Orientation::VERTICAL);
-  volume_and_player.set_orientation(Gtk::Orientation::HORIZONTAL);
-  volume_and_player.set_halign(Gtk::Align::END);
-  volume_and_player.set_valign(Gtk::Align::CENTER);
-  volume_and_player.append(player_choose);
-  volume_and_player.append(device_choose);
-  volume_and_player.append(volume_bar);
-  volume_and_player.set_spacing(5);
+  volume_bar_volume_button.set_orientation(Gtk::Orientation::VERTICAL);
+  volume_and_player_box.set_orientation(Gtk::Orientation::HORIZONTAL);
+  volume_and_player_box.set_halign(Gtk::Align::END);
+  volume_and_player_box.set_valign(Gtk::Align::CENTER);
+  volume_and_player_box.append(player_choose_button);
+  volume_and_player_box.append(device_choose_button);
+  volume_and_player_box.append(volume_bar_volume_button);
+  volume_and_player_box.set_spacing(5);
 
-  progress_bar_song.set_halign(Gtk::Align::FILL);
-  progress_bar_song.set_valign(Gtk::Align::END);
-  progress_bar_song.set_orientation(Gtk::Orientation::HORIZONTAL);
-  progress_bar_song.set_adjustment(Gtk::Adjustment::create(0.50, 0, 1));
+  progress_bar_song_scale.set_halign(Gtk::Align::FILL);
+  progress_bar_song_scale.set_valign(Gtk::Align::END);
+  progress_bar_song_scale.set_orientation(Gtk::Orientation::HORIZONTAL);
+  progress_bar_song_scale.set_adjustment(Gtk::Adjustment::create(0.50, 0, 1));
   /* GTK4 is missing pressed/released signals for GtkRange/GtkScale.
    * We need to wait when GTK4 command will fix this bug
      https://gitlab.gnome.org/GNOME/gtk/-/issues/4939  */
@@ -49,9 +49,9 @@ PlayerWindow::PlayerWindow() {
   //  gesture_click->signal_released().connect([](int, double, double) {
   //    std::cout << "Left mouse button released!" << std::endl;
   //  });
-  //  progress_bar_song.add_controller(gesture_click);
-  progress_bar_song.signal_value_changed().connect([&]() {
-    double position = progress_bar_song.get_value();
+  //  progress_bar_song_scale.add_controller(gesture_click);
+  progress_bar_song_scale.signal_value_changed().connect([&]() {
+    double position = progress_bar_song_scale.get_value();
     uint64_t song_length = -1;
     auto metadata = player.get_metadata();
     auto it = std::find_if(
@@ -67,25 +67,26 @@ PlayerWindow::PlayerWindow() {
     player.set_position(position * song_length);
   });
 
-  song_name.set_label("1");
-  song_name.set_halign(Gtk::Align::START);
-  song_name.set_valign(Gtk::Align::CENTER);
-  main_grid.attach(song_name, 0, 1);
-  playpause.signal_clicked().connect(
+  song_name_label.set_label("1");
+  song_name_label.set_halign(Gtk::Align::START);
+  song_name_label.set_valign(Gtk::Align::CENTER);
+  main_grid.attach(song_name_label, 0, 1);
+  playpause_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_playpause_clicked));
-  prev.signal_clicked().connect(
+  prev_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_prev_clicked));
-  next.signal_clicked().connect(
+  next_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_next_clicked));
-  shuffle.signal_clicked().connect(
+  shuffle_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_shuffle_clicked));
-  player_choose.signal_clicked().connect(
+  player_choose_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_player_choose_clicked));
-  device_choose.signal_clicked().connect(
+  device_choose_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_device_choose_clicked));
-  main_grid.attach(control_buttons, 1, 1);
-  main_grid.attach(volume_and_player, 2, 1);
-  main_grid.attach(progress_bar_song, 0, 0, 3, 1);
+
+  main_grid.attach(control_buttons_box, 1, 1);
+  main_grid.attach(volume_and_player_box, 2, 1);
+  main_grid.attach(progress_bar_song_scale, 0, 0, 3, 1);
 
   // add shuffle css for changing colors if shuffle enabled
   //  Create a CSS provider and load a stylesheet
@@ -94,9 +95,16 @@ PlayerWindow::PlayerWindow() {
                                "  background-color: green;\n"
                                "}\n");
   // Apply the stylesheet to our custom widget
-  shuffle.get_style_context()->add_provider(css_provider, 600);
+  shuffle_button.get_style_context()->add_provider(css_provider, 600);
+  if (player.get_shuffle()) {
+    shuffle_button.get_style_context()->add_class("shuffle-enabled");
+  }
   // check if buttons accessible or not
   check_buttons_features();
+
+  player_choose_popover.signal_closed().connect(
+      [this] { player_choose_popover.unparent(); });
+  player_choose_popover.set_hexpand(true);
 }
 
 void PlayerWindow::on_playpause_clicked() { player.send_play_pause(); }
@@ -107,48 +115,96 @@ void PlayerWindow::on_next_clicked() { player.send_next(); }
 
 void PlayerWindow::on_shuffle_clicked() {
   bool current_shuffle = player.get_shuffle();
-  player.set_shuffle(!current_shuffle);
-  current_shuffle = player.get_shuffle();
-  if (current_shuffle) {
-    shuffle.set_state_flags(Gtk::StateFlags::ACTIVE, true);
-    auto style_context = shuffle.get_style_context();
-    style_context->remove_class("shuffle-enabled");
-  } else {
-    shuffle.set_state_flags(Gtk::StateFlags::ACTIVE, false);
-    auto style_context = shuffle.get_style_context();
+  bool success = player.set_shuffle(!current_shuffle);
+  if (!current_shuffle && success) {
+    auto style_context = shuffle_button.get_style_context();
     style_context->add_class("shuffle-enabled");
+  } else if (current_shuffle && success) {
+    auto style_context = shuffle_button.get_style_context();
+    style_context->remove_class("shuffle-enabled");
   }
 }
 
-void PlayerWindow::on_player_choose_clicked() {}
+void PlayerWindow::on_player_choose_clicked() {
+  // Set up popover for playerc choose button
+  player_choose_popover.set_parent(player_choose_button);
+  Gtk::ListBox players_list;
+  players_list.set_margin_bottom(5);
+  players_list.set_halign(Gtk::Align::FILL);
+  std::string selected_player_interface = player.get_current_player_name();
+  auto players_vec = player.get_players();
+
+  for (const auto &pl : players_vec) {
+    auto player_choosing_button = Gtk::ToggleButton(pl.first);
+    if (pl.first == selected_player_interface) {
+      player_choosing_button.set_active();
+    }
+    player_choosing_button.set_has_frame(false);
+    player_choosing_button.set_can_focus();
+    player_choosing_button.set_halign(Gtk::Align::FILL);
+    Gtk::ListBoxRow row;
+    row.set_selectable(false);
+    row.set_child(player_choosing_button);
+    row.set_halign(Gtk::Align::FILL);
+    row.set_valign(Gtk::Align::CENTER);
+    players_list.append(row);
+  }
+  Gtk::ToggleButton *first_button = dynamic_cast<Gtk::ToggleButton *>(
+      players_list.get_row_at_index(0)->get_child());
+  for (unsigned short i = 0; i < players_vec.size(); i++) {
+    Gtk::ListBoxRow *row = players_list.get_row_at_index(i);
+    Gtk::ToggleButton *button =
+        dynamic_cast<Gtk::ToggleButton *>(row->get_child());
+    if (button) {
+      if (button != first_button) {
+        button->set_group(*first_button);
+      }
+      button->signal_clicked().connect(sigc::bind(
+          sigc::mem_fun(*this, &PlayerWindow::on_player_choosed), i));
+    }
+  }
+
+  player_choose_popover.set_child(players_list);
+  player_choose_popover.popup();
+}
+
+void PlayerWindow::on_player_choosed(unsigned short player_index) {
+  player_choose_popover.popdown();
+  player.select_player(player_index);
+  if (player.get_shuffle()) {
+    shuffle_button.get_style_context()->add_class("shuffle-enabled");
+  } else {
+    shuffle_button.get_style_context()->remove_class("shuffle-enabled");
+  }
+}
 
 void PlayerWindow::on_device_choose_clicked() {}
 
 void PlayerWindow::check_buttons_features() {
   if (player.get_play_pause_method()) {
-    playpause.set_sensitive(true);
+    playpause_button.set_sensitive(true);
   } else {
-    playpause.set_sensitive(false);
+    playpause_button.set_sensitive(false);
   }
   if (player.get_next_method()) {
-    next.set_sensitive(true);
+    next_button.set_sensitive(true);
   } else {
-    next.set_sensitive(false);
+    next_button.set_sensitive(false);
   }
   if (player.get_previous_method()) {
-    prev.set_sensitive(true);
+    prev_button.set_sensitive(true);
   } else {
-    prev.set_sensitive(false);
+    prev_button.set_sensitive(false);
   }
   if (player.get_setpos_method()) {
-    progress_bar_song.set_sensitive(true);
+    progress_bar_song_scale.set_sensitive(true);
   } else {
-    progress_bar_song.set_sensitive(false);
+    progress_bar_song_scale.set_sensitive(false);
   }
   if (player.get_is_shuffle_prop()) {
-    shuffle.set_sensitive(true);
+    shuffle_button.set_sensitive(true);
   } else {
-    shuffle.set_sensitive(false);
+    shuffle_button.set_sensitive(false);
   }
   if (player.get_is_pos_prop()) {
     // update time of song
@@ -156,8 +212,8 @@ void PlayerWindow::check_buttons_features() {
     // not update time of song
   }
   if (player.get_is_volume_prop()) {
-    volume_bar.set_sensitive(true);
+    volume_bar_volume_button.set_sensitive(true);
   } else {
-    volume_bar.set_sensitive(false);
+    volume_bar_volume_button.set_sensitive(false);
   }
 }
