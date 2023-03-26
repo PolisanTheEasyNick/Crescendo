@@ -107,7 +107,15 @@ PlayerWindow::PlayerWindow() {
   player_choose_popover.set_hexpand(true);
 }
 
-void PlayerWindow::on_playpause_clicked() { player.send_play_pause(); }
+void PlayerWindow::on_playpause_clicked() {
+  bool is_playing = player.get_playback_status();
+  bool success = player.send_play_pause();
+  if (is_playing && success) {
+    playpause_button.set_icon_name("media-playback-start");
+  } else if (!is_playing && success) {
+    playpause_button.set_icon_name("media-playback-pause");
+  }
+}
 
 void PlayerWindow::on_prev_clicked() { player.send_previous(); }
 
@@ -175,6 +183,13 @@ void PlayerWindow::on_player_choosed(unsigned short player_index) {
     shuffle_button.get_style_context()->add_class("shuffle-enabled");
   } else {
     shuffle_button.get_style_context()->remove_class("shuffle-enabled");
+  }
+  check_buttons_features();
+  bool is_playing = player.get_playback_status();
+  if (!is_playing) {
+    playpause_button.set_icon_name("media-playback-start");
+  } else {
+    playpause_button.set_icon_name("media-playback-pause");
   }
 }
 

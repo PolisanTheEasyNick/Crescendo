@@ -46,6 +46,7 @@ public:
   bool set_position(int64_t pos);
   double get_volume();
   bool set_volume(double volume);
+  bool get_playback_status();
   std::string get_current_player_name();
   std::vector<std::pair<std::string, std::string>> get_metadata();
   std::vector<std::pair<std::string, std::string>> get_output_devices();

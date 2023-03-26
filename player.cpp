@@ -847,6 +847,55 @@ bool Player::set_volume(double volume) {
   return true;
 }
 
+bool Player::get_playback_status() {
+  if (!is_playback_status_prop) {
+    std::cerr << "This player does not compatible with PlayBack property!"
+              << std::endl;
+    return false;
+  }
+  DBusMessage *dbus_msg, *dbus_reply;
+  if (selected_player_id == -1) {
+    std::cout
+        << "get_playback_status(): Player not selected, can't get PlayBack"
+        << std::endl;
+    return false;
+  }
+  // Compose remote procedure call
+  dbus_msg = dbus_message_new_method_call(
+      players[selected_player_id].second.c_str(), // Destination bus name
+      "/org/mpris/MediaPlayer2",                  // Object path
+      "org.freedesktop.DBus.Properties",          // Interface name
+      "Get");                                     // Method name
+
+  if (!dbus_msg) {
+    std::cout << "Error creating message." << std::endl;
+    return false;
+  }
+  const char *interfaceName = "org.mpris.MediaPlayer2.Player";
+  const char *propertyName = "PlaybackStatus";
+  dbus_message_append_args(dbus_msg, DBUS_TYPE_STRING, &interfaceName,
+                           DBUS_TYPE_STRING, &propertyName, DBUS_TYPE_INVALID);
+  // Invoke remote procedure call, block for response
+  dbus_reply = dbus_connection_send_with_reply_and_block(
+      dbus_conn, dbus_msg, DBUS_TIMEOUT_USE_DEFAULT, &dbus_error);
+  if (!dbus_reply || dbus_error_is_set(&dbus_error)) {
+    std::cout << "Error getting reply: " << dbus_error.message << std::endl;
+    return false;
+  }
+
+  DBusMessageIter iter;
+  if (dbus_message_iter_init(dbus_reply, &iter) &&
+      dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_VARIANT) {
+    char *playback;
+
+    // Extract variant value
+    dbus_message_iter_recurse(&iter, &iter);
+    dbus_message_iter_get_basic(&iter, &playback);
+    return strcmp("Playing", playback) == 0;
+  }
+  return false;
+}
+
 std::string Player::get_current_player_name() {
   DBusMessage *dbus_msg, *dbus_reply;
   // Compose remote procedure call
