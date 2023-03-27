@@ -938,6 +938,119 @@ std::string Player::get_current_player_name() {
   return identity;
 }
 
+unsigned short Player::get_current_device_sink_index() {
+#ifdef HAVE_PULSEAUDIO
+  // Code thatuse PulseAudio
+  std::cout << "PulseAudio installed" << std::endl;
+#else
+  // Code that doesn't uses PulseAudio
+  std::cout << "PulseAudio not installed, can't continue." << std::endl;
+  return false;
+#endif
+  DBusMessage *dbus_msg, *dbus_reply;
+  static uint32_t proc_id = 0;
+  dbus_msg = dbus_message_new_method_call(
+      "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+      "GetConnectionUnixProcessID");
+  const char *interface_name = players[selected_player_id].second.c_str();
+  if (!dbus_message_append_args(dbus_msg, DBUS_TYPE_STRING, &interface_name,
+                                DBUS_TYPE_INVALID)) {
+    std::cout << "Error while appending to message" << std::endl;
+    proc_id = 0;
+  }
+
+  dbus_reply = dbus_connection_send_with_reply_and_block(dbus_conn, dbus_msg,
+                                                         -1, &dbus_error);
+
+  // Get the ProcessID for player from the reply message
+  DBusMessageIter iter;
+
+  if (dbus_message_iter_init(dbus_reply, &iter) &&
+      dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_UINT32) {
+    dbus_message_iter_get_basic(&iter, &proc_id);
+  }
+  // Create a main loop object
+  pa_mainloop *mainloop = pa_mainloop_new();
+
+  // Create a new PulseAudio context
+  pa_context *context =
+      pa_context_new(pa_mainloop_get_api(mainloop), "example");
+
+  // Connect to the PulseAudio server
+  if (pa_context_connect(context, NULL, PA_CONTEXT_NOFLAGS, NULL) < 0) {
+    std::cerr << "pa_context_connect() failed: "
+              << pa_strerror(pa_context_errno(context)) << std::endl;
+    pa_context_unref(context);
+    pa_mainloop_free(mainloop);
+    return -1;
+  }
+
+  // Wait for the context to be ready
+  while (pa_context_get_state(context) != PA_CONTEXT_READY) {
+    pa_mainloop_iterate(mainloop, true, NULL);
+  }
+  static int player_sink_id = -1;
+  // Get the list of sink devices
+  static std::string player_name = players[selected_player_id].first;
+  pa_operation *operation = pa_context_get_sink_input_info_list(
+      context,
+      [](pa_context *context, const pa_sink_input_info *info, int eol,
+         void *userdata) {
+        if (eol == 0) {
+          std::cout << "Sink input #" << info->index << ":" << std::endl;
+          std::cout << "    Name: " << info->name << std::endl;
+          std::cout << "    Application name: "
+                    << pa_proplist_gets(info->proplist, "application.name")
+                    << std::endl;
+          std::cout << "    Client index: " << info->client << std::endl;
+          std::cout << "    Sink index: " << info->sink << std::endl;
+          std::cout << "    App Binary: "
+                    << pa_proplist_gets(info->proplist,
+                                        "application.process.binary")
+                    << std::endl;
+          std::cout << "    Process id: "
+                    << pa_proplist_gets(info->proplist,
+                                        "application.process.id")
+                    << std::endl;
+          std::cout << "comparing \""
+                    << pa_proplist_gets(info->proplist, "application.name")
+                    << "\" and \"" << player_name << "\"" << std::endl;
+          char player_proc_id_str[10];
+          snprintf(player_proc_id_str, sizeof(player_proc_id_str), "%u",
+                   proc_id);
+          std::cout << "procid: " << player_proc_id_str << std::endl;
+          if (strcmp(pa_proplist_gets(info->proplist, "application.process.id"),
+                     player_proc_id_str) == 0 ||
+              strcmp(pa_proplist_gets(info->proplist, "application.name"),
+                     player_name.c_str()) == 0) {
+            std::cout << "Found current player output sink: " << player_name
+                      << ". #" << info->sink << std::endl;
+            int *sink_id = static_cast<int *>(userdata);
+            *sink_id = info->sink;
+            return;
+          }
+        }
+      },
+      &player_sink_id);
+  if (!operation) {
+    std::cerr << "Failed to get player sink." << std::endl;
+    pa_context_disconnect(context);
+    pa_mainloop_free(mainloop);
+    return -1;
+  }
+
+  // Wait for the operation to complete
+  while (pa_operation_get_state(operation) == PA_OPERATION_RUNNING) {
+    pa_mainloop_iterate(mainloop, true, NULL);
+  }
+
+  if (player_sink_id == -1) {
+    std::cout << "Not found player sink. Can't continue." << std::endl;
+    return -1;
+  }
+  return player_sink_id;
+}
+
 inline const char *const bool_to_string(bool b) { return b ? "true" : "false"; }
 
 std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
@@ -1113,7 +1226,8 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
   return metadata;
 }
 
-std::vector<std::pair<std::string, std::string>> Player::get_output_devices() {
+std::vector<std::pair<std::string, unsigned short>>
+Player::get_output_devices() {
 #ifdef HAVE_PULSEAUDIO
   // Code thatuse PulseAudio
   std::cout << "PulseAudio installed" << std::endl;
@@ -1148,10 +1262,9 @@ std::vector<std::pair<std::string, std::string>> Player::get_output_devices() {
           pa_context_disconnect(context);
         } else if (eol == 0) {
           // Sink device
-          auto devices =
-              static_cast<std::vector<std::pair<std::string, std::string>> *>(
-                  userdata);
-          devices->emplace_back(info->description, info->name);
+          auto devices = static_cast<
+              std::vector<std::pair<std::string, unsigned short>> *>(userdata);
+          devices->emplace_back(info->description, info->index);
         }
       },
       &devices);
@@ -1169,7 +1282,7 @@ std::vector<std::pair<std::string, std::string>> Player::get_output_devices() {
 
   for (auto &device : devices) {
     std::cout << "Sink name: " << device.first << std::endl;
-    std::cout << "Sink description: " << device.second << std::endl;
+    std::cout << "Sink index: " << device.second << std::endl;
   }
 
   pa_context_disconnect(context);
@@ -1179,7 +1292,7 @@ std::vector<std::pair<std::string, std::string>> Player::get_output_devices() {
   return devices;
 }
 
-void Player::set_output_device(std::string output_sink_path) {
+void Player::set_output_device(unsigned short output_sink_index) {
 #ifdef HAVE_PULSEAUDIO
   // Code thatuse PulseAudio
   std::cout << "PulseAudio installed" << std::endl;
@@ -1189,7 +1302,7 @@ void Player::set_output_device(std::string output_sink_path) {
   return false;
 #endif
   DBusMessage *dbus_msg, *dbus_reply;
-  static uint32_t *proc_id = 0;
+  static uint32_t proc_id = 0;
   dbus_msg = dbus_message_new_method_call(
       "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
       "GetConnectionUnixProcessID");
@@ -1211,8 +1324,6 @@ void Player::set_output_device(std::string output_sink_path) {
     dbus_message_iter_get_basic(&iter, &proc_id);
   }
 
-  std::cout << "proc_id: " << proc_id << std::endl;
-
   // Create a main loop object
   pa_mainloop *mainloop = pa_mainloop_new();
 
@@ -1233,7 +1344,7 @@ void Player::set_output_device(std::string output_sink_path) {
   while (pa_context_get_state(context) != PA_CONTEXT_READY) {
     pa_mainloop_iterate(mainloop, true, NULL);
   }
-  static int sink_id = -1;
+  static int player_sink_id = -1;
   // Get the list of sink devices
   static std::string player_name = players[selected_player_id].first;
   pa_operation *operation = pa_context_get_sink_input_info_list(
@@ -1260,14 +1371,15 @@ void Player::set_output_device(std::string output_sink_path) {
                     << pa_proplist_gets(info->proplist, "application.name")
                     << "\" and \"" << player_name << "\"" << std::endl;
           char player_proc_id_str[10];
-          std::memset(player_proc_id_str, 0, sizeof(player_proc_id_str));
+          snprintf(player_proc_id_str, sizeof(player_proc_id_str), "%u",
+                   proc_id);
           std::cout << "procid: " << player_proc_id_str << std::endl;
           if (strcmp(pa_proplist_gets(info->proplist, "application.process.id"),
                      player_proc_id_str) == 0 ||
               strcmp(pa_proplist_gets(info->proplist, "application.name"),
                      player_name.c_str()) == 0) {
             std::cout << "Found current player: " << player_name << ". #"
-                      << info->sink << std::endl;
+                      << info->index << std::endl;
             int *sink_id = static_cast<int *>(userdata);
             *sink_id = info->index;
             // info->client
@@ -1275,7 +1387,7 @@ void Player::set_output_device(std::string output_sink_path) {
           }
         }
       },
-      &sink_id);
+      &player_sink_id);
   if (!operation) {
     std::cerr << "Failed to get player sink." << std::endl;
     pa_context_disconnect(context);
@@ -1288,18 +1400,18 @@ void Player::set_output_device(std::string output_sink_path) {
     pa_mainloop_iterate(mainloop, true, NULL);
   }
 
-  if (sink_id == -1) {
+  if (player_sink_id == -1) {
     std::cout << "Not found player sink. Can't continue." << std::endl;
     return;
   }
 
-  std::cout << "Trying to change output device for sink " << sink_id << " to "
-            << output_sink_path << std::endl;
-  static const std::string output_sink_path_copy = output_sink_path;
+  std::cout << "Trying to change output device for sink " << player_sink_id
+            << " to " << output_sink_index << std::endl;
+  static const unsigned short output_sink_path_copy = output_sink_index;
 
   // Get the list of sink devices
-  pa_operation *operation2 = pa_context_move_sink_input_by_name(
-      context, sink_id, output_sink_path_copy.c_str(), NULL, NULL);
+  pa_operation *operation2 = pa_context_move_sink_input_by_index(
+      context, player_sink_id, output_sink_index, NULL, NULL);
   if (!operation2) {
     std::cout << "Failed to set sink output device." << std::endl;
     pa_context_disconnect(context);

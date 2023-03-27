@@ -33,11 +33,12 @@ protected:
   Gtk::Label song_name_label;
   Gtk::Scale progress_bar_song_scale;
   Gtk::VolumeButton volume_bar_volume_button;
-  Gtk::Popover player_choose_popover;
+  Gtk::Popover player_choose_popover, device_choose_popover;
 
 private:
   void check_buttons_features();
   void on_player_choosed(unsigned short);
+  void on_device_choosed(unsigned short);
 };
 
 #endif // PLAYERWINDOW_H

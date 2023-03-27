@@ -12,7 +12,10 @@
 
 class Player {
 private:
-  std::vector<std::pair<std::string, std::string>> players, devices;
+  std::vector<std::pair<std::string, std::string>>
+      players; // Name: dbus interface
+  std::vector<std::pair<std::string, unsigned short>>
+      devices; // Name: pulseaudio sink index
   DBusConnection *dbus_conn = nullptr;
   DBusError dbus_error;
   unsigned int selected_player_id = -1;
@@ -48,9 +51,10 @@ public:
   bool set_volume(double volume);
   bool get_playback_status();
   std::string get_current_player_name();
+  unsigned short get_current_device_sink_index();
   std::vector<std::pair<std::string, std::string>> get_metadata();
-  std::vector<std::pair<std::string, std::string>> get_output_devices();
-  void set_output_device(std::string sink_name);
+  std::vector<std::pair<std::string, unsigned short>> get_output_devices();
+  void set_output_device(unsigned short);
 
   bool get_play_pause_method() const;
   bool get_pause_method() const;

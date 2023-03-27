@@ -104,7 +104,11 @@ PlayerWindow::PlayerWindow() {
 
   player_choose_popover.signal_closed().connect(
       [this] { player_choose_popover.unparent(); });
-  player_choose_popover.set_hexpand(true);
+  player_choose_popover.set_halign(Gtk::Align::FILL);
+
+  device_choose_popover.signal_closed().connect(
+      [this] { player_choose_popover.unparent(); });
+  device_choose_popover.set_halign(Gtk::Align::FILL);
 }
 
 void PlayerWindow::on_playpause_clicked() {
@@ -134,6 +138,11 @@ void PlayerWindow::on_shuffle_clicked() {
 }
 
 void PlayerWindow::on_player_choose_clicked() {
+  if (!player_choose_popover.get_visible()) {
+    std::cout << "Not visible" << std::endl;
+  } else {
+    std::cout << "Visiable" << std::endl;
+  }
   // Set up popover for playerc choose button
   player_choose_popover.set_parent(player_choose_button);
   Gtk::ListBox players_list;
@@ -193,7 +202,57 @@ void PlayerWindow::on_player_choosed(unsigned short player_index) {
   }
 }
 
-void PlayerWindow::on_device_choose_clicked() {}
+void PlayerWindow::on_device_choose_clicked() {
+  // Set up popover for device choose button
+  device_choose_popover.set_parent(device_choose_button);
+  Gtk::ListBox devices_list;
+  devices_list.set_margin_bottom(5);
+  devices_list.set_halign(Gtk::Align::FILL);
+  unsigned short selected_device_sink_index =
+      player.get_current_device_sink_index();
+  std::cout << "Player selected device: " << selected_device_sink_index
+            << std::endl;
+  auto devices_vec = player.get_output_devices();
+
+  for (const auto &dev : devices_vec) {
+    auto device_choosing_button = Gtk::ToggleButton(dev.first);
+    if (dev.second == selected_device_sink_index) {
+      device_choosing_button.set_active();
+    }
+    device_choosing_button.set_has_frame(false);
+    device_choosing_button.set_can_focus();
+    device_choosing_button.set_halign(Gtk::Align::FILL);
+    Gtk::ListBoxRow row;
+    row.set_selectable(false);
+    row.set_child(device_choosing_button);
+    row.set_halign(Gtk::Align::FILL);
+    row.set_valign(Gtk::Align::CENTER);
+    devices_list.append(row);
+  }
+  Gtk::ToggleButton *first_button = dynamic_cast<Gtk::ToggleButton *>(
+      devices_list.get_row_at_index(0)->get_child());
+  for (unsigned short i = 0; i < devices_vec.size(); i++) {
+    Gtk::ListBoxRow *row = devices_list.get_row_at_index(i);
+    Gtk::ToggleButton *button =
+        dynamic_cast<Gtk::ToggleButton *>(row->get_child());
+    if (button) {
+      if (button != first_button) {
+        button->set_group(*first_button);
+      }
+      button->signal_clicked().connect(
+          sigc::bind(sigc::mem_fun(*this, &PlayerWindow::on_device_choosed),
+                     devices_vec[i].second));
+    }
+  }
+
+  device_choose_popover.set_child(devices_list);
+  device_choose_popover.popup();
+}
+
+void PlayerWindow::on_device_choosed(unsigned short device_sink_index) {
+  device_choose_popover.popdown();
+  player.set_output_device(device_sink_index);
+}
 
 void PlayerWindow::check_buttons_features() {
   if (player.get_play_pause_method()) {
