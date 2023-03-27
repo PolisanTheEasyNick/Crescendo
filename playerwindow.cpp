@@ -1,8 +1,9 @@
 #include "playerwindow.h"
 
 PlayerWindow::PlayerWindow() {
-  set_icon_name("org.polisan.crescendio");
-  set_default_icon_name("org.polisan.crescendio");
+
+  set_icon_name("org.polisan.crescendo");
+  set_default_icon_name("org.polisan.crescendo");
   set_title("Universal Player");
   set_default_size(500, 100);
   set_child(main_grid);
@@ -27,19 +28,21 @@ PlayerWindow::PlayerWindow() {
   device_choose_button.set_icon_name("audio-headphones");
   player_choose_button.set_icon_name("multimedia-player");
 
-  volume_bar_volume_button.set_orientation(Gtk::Orientation::VERTICAL);
+  volume_bar_scale_button.set_orientation(Gtk::Orientation::VERTICAL);
+  volume_bar_scale_button.signal_value_changed().connect(
+      [this](double value) { player.set_volume(value); });
   volume_and_player_box.set_orientation(Gtk::Orientation::HORIZONTAL);
   volume_and_player_box.set_halign(Gtk::Align::END);
   volume_and_player_box.set_valign(Gtk::Align::CENTER);
   volume_and_player_box.append(player_choose_button);
   volume_and_player_box.append(device_choose_button);
-  volume_and_player_box.append(volume_bar_volume_button);
+  volume_and_player_box.append(volume_bar_scale_button);
   volume_and_player_box.set_spacing(5);
 
   progress_bar_song_scale.set_halign(Gtk::Align::FILL);
   progress_bar_song_scale.set_valign(Gtk::Align::END);
   progress_bar_song_scale.set_orientation(Gtk::Orientation::HORIZONTAL);
-  progress_bar_song_scale.set_adjustment(Gtk::Adjustment::create(0.50, 0, 1));
+  progress_bar_song_scale.set_adjustment(Gtk::Adjustment::create(0.5, 0, 1));
   /* GTK4 is missing pressed/released signals for GtkRange/GtkScale.
    * We need to wait when GTK4 command will fix this bug
      https://gitlab.gnome.org/GNOME/gtk/-/issues/4939  */
@@ -202,6 +205,12 @@ void PlayerWindow::on_player_choosed(unsigned short player_index) {
   } else {
     playpause_button.set_icon_name("media-playback-pause");
   }
+  if (player.get_is_volume_prop()) {
+    std::cout << "Player changed, new player volume: ";
+    double volume = player.get_volume();
+    std::cout << volume << std::endl;
+    volume_bar_scale_button.set_value(volume);
+  }
 }
 
 void PlayerWindow::on_device_choose_clicked() {
@@ -288,8 +297,8 @@ void PlayerWindow::check_buttons_features() {
     // not update time of song
   }
   if (player.get_is_volume_prop()) {
-    volume_bar_volume_button.set_sensitive(true);
+    volume_bar_scale_button.set_sensitive(true);
   } else {
-    volume_bar_volume_button.set_sensitive(false);
+    volume_bar_scale_button.set_sensitive(false);
   }
 }

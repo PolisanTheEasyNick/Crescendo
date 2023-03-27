@@ -19,9 +19,9 @@ add_definitions(${GTKMM_CFLAGS_OTHER})
 # Install the icon file using xdg-desktop-icon
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/icon.svg"
         DESTINATION $ENV{HOME}/.local/share/icons/hicolor/scalable/apps/
-        RENAME "org.polisan.crescendio.svg")
+        RENAME "org.polisan.crescendo.svg")
 
-add_executable(Crescendo player.h player.cpp helper.h playerwindow.h playerwindow.cpp main.cpp)
+add_executable(Crescendo player.h player.cpp helper.h playerwindow.h playerwindow.cpp volumebutton.h volumebutton.cpp main.cpp)
 
 target_include_directories(Crescendo PRIVATE ${DBUS_INCLUDE_DIRS})
 target_link_libraries(Crescendo PRIVATE ${DBUS_LIBRARIES} pugixml ${GTKMM_LIBRARIES})
