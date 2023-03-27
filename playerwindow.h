@@ -2,6 +2,7 @@
 #define PLAYERWINDOW_H
 
 #include "player.h"
+#include "volumebutton.h"
 #include <gtkmm/application.h>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/box.h>
@@ -13,8 +14,8 @@
 #include <gtkmm/listbox.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/scale.h>
+#include <gtkmm/scalebutton.h>
 #include <gtkmm/togglebutton.h>
-#include <gtkmm/volumebutton.h>
 
 class PlayerWindow : public Gtk::ApplicationWindow {
 public:
@@ -32,7 +33,7 @@ protected:
       player_choose_button, device_choose_button;
   Gtk::Label song_name_label;
   Gtk::Scale progress_bar_song_scale;
-  Gtk::VolumeButton volume_bar_volume_button;
+  VolumeButton volume_bar_scale_button;
   Gtk::Popover player_choose_popover, device_choose_popover;
 
 private:
