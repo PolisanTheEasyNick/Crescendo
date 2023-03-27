@@ -948,7 +948,7 @@ unsigned short Player::get_current_device_sink_index() {
   return false;
 #endif
   DBusMessage *dbus_msg, *dbus_reply;
-  static uint32_t *proc_id = 0;
+  static uint32_t proc_id = 0;
   dbus_msg = dbus_message_new_method_call(
       "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
       "GetConnectionUnixProcessID");
@@ -969,7 +969,6 @@ unsigned short Player::get_current_device_sink_index() {
       dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_UINT32) {
     dbus_message_iter_get_basic(&iter, &proc_id);
   }
-
   // Create a main loop object
   pa_mainloop *mainloop = pa_mainloop_new();
 
@@ -1017,7 +1016,8 @@ unsigned short Player::get_current_device_sink_index() {
                     << pa_proplist_gets(info->proplist, "application.name")
                     << "\" and \"" << player_name << "\"" << std::endl;
           char player_proc_id_str[10];
-          std::memset(player_proc_id_str, 0, sizeof(player_proc_id_str));
+          snprintf(player_proc_id_str, sizeof(player_proc_id_str), "%u",
+                   proc_id);
           std::cout << "procid: " << player_proc_id_str << std::endl;
           if (strcmp(pa_proplist_gets(info->proplist, "application.process.id"),
                      player_proc_id_str) == 0 ||
@@ -1302,7 +1302,7 @@ void Player::set_output_device(unsigned short output_sink_index) {
   return false;
 #endif
   DBusMessage *dbus_msg, *dbus_reply;
-  static uint32_t *proc_id = 0;
+  static uint32_t proc_id = 0;
   dbus_msg = dbus_message_new_method_call(
       "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
       "GetConnectionUnixProcessID");
@@ -1323,8 +1323,6 @@ void Player::set_output_device(unsigned short output_sink_index) {
       dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_UINT32) {
     dbus_message_iter_get_basic(&iter, &proc_id);
   }
-
-  std::cout << "proc_id: " << proc_id << std::endl;
 
   // Create a main loop object
   pa_mainloop *mainloop = pa_mainloop_new();
@@ -1373,7 +1371,8 @@ void Player::set_output_device(unsigned short output_sink_index) {
                     << pa_proplist_gets(info->proplist, "application.name")
                     << "\" and \"" << player_name << "\"" << std::endl;
           char player_proc_id_str[10];
-          std::memset(player_proc_id_str, 0, sizeof(player_proc_id_str));
+          snprintf(player_proc_id_str, sizeof(player_proc_id_str), "%u",
+                   proc_id);
           std::cout << "procid: " << player_proc_id_str << std::endl;
           if (strcmp(pa_proplist_gets(info->proplist, "application.process.id"),
                      player_proc_id_str) == 0 ||
