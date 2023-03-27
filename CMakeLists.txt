@@ -15,6 +15,12 @@ include_directories(${GTKMM_INCLUDE_DIRS})
 link_directories(${GTKMM_LIBRARY_DIRS})
 add_definitions(${GTKMM_CFLAGS_OTHER})
 
+
+# Install the icon file using xdg-desktop-icon
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/icon.svg"
+        DESTINATION $ENV{HOME}/.local/share/icons/hicolor/scalable/apps/
+        RENAME "org.polisan.crescendio.svg")
+
 add_executable(Crescendo player.h player.cpp helper.h playerwindow.h playerwindow.cpp main.cpp)
 
 target_include_directories(Crescendo PRIVATE ${DBUS_INCLUDE_DIRS})
@@ -29,6 +35,4 @@ else()
     message(WARNING "PulseAudio not found. Building without PulseAudio support.")
 endif()
 
-
-install(TARGETS Crescendo
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS Crescendo LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})

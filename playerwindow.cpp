@@ -1,6 +1,8 @@
 #include "playerwindow.h"
 
 PlayerWindow::PlayerWindow() {
+  set_icon_name("org.polisan.crescendio");
+  set_default_icon_name("org.polisan.crescendio");
   set_title("Universal Player");
   set_default_size(500, 100);
   set_child(main_grid);
