@@ -23,7 +23,7 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/icon.svg"
 add_executable(Crescendo player.h player.cpp helper.h playerwindow.h playerwindow.cpp volumebutton.h volumebutton.cpp main.cpp)
 
 target_include_directories(Crescendo PRIVATE ${SDBUS_CXX_INCLUDE_DIRS})
-target_link_libraries(Crescendo PRIVATE pugixml sdbus-c++ ${GTKMM_LIBRARIES} ${SDBUS_LIBRARIES})
+target_link_libraries(Crescendo PRIVATE pugixml sdbus-c++ ${GTKMM_LIBRARIES})
 
 find_package(PulseAudio)
 if (PulseAudio_FOUND)
