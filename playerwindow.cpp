@@ -1,6 +1,25 @@
 #include "playerwindow.h"
 
 PlayerWindow::PlayerWindow() {
+  // setup current choosed player
+  if (m_player.get_shuffle()) {
+    m_shuffle_button.get_style_context()->add_class("shuffle-enabled");
+  } else {
+    m_shuffle_button.get_style_context()->remove_class("shuffle-enabled");
+  }
+  check_buttons_features();
+  bool is_playing = m_player.get_playback_status();
+  if (!is_playing) {
+    m_playpause_button.set_icon_name("media-playback-start");
+  } else {
+    m_playpause_button.set_icon_name("media-playback-pause");
+  }
+  if (m_player.get_is_volume_prop()) {
+    std::cout << "Player changed, new player volume: ";
+    double volume = m_player.get_volume();
+    std::cout << volume << std::endl;
+    m_volume_bar_scale_button.set_value(volume);
+  }
 
   set_icon_name("org.polisan.crescendo");
   set_default_icon_name("org.polisan.crescendo");
@@ -114,7 +133,6 @@ PlayerWindow::PlayerWindow() {
   m_device_choose_popover.signal_closed().connect(
       [this] { m_player_choose_popover.unparent(); });
   m_device_choose_popover.set_halign(Gtk::Align::FILL);
-
 #ifdef HAVE_PULSEAUDIO
 #else
   // Code that doesn't uses PulseAudio

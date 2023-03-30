@@ -1115,10 +1115,8 @@ Player::get_output_devices() {
 
 void Player::set_output_device(unsigned short output_sink_index) {
 #ifdef HAVE_PULSEAUDIO
-  // Code thatuse PulseAudio
   std::cout << "PulseAudio installed" << std::endl;
 #else
-  // Code that doesn't uses PulseAudio
   std::cout << "PulseAudio not installed, can't continue." << std::endl;
   return;
 #endif
