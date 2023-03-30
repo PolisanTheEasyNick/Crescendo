@@ -2,34 +2,34 @@
 #define PLAYER_H
 #include "pugixml.hpp"
 #include <cstring>
-#include <dbus/dbus.h>
 #include <iomanip>
 #include <iostream>
 #include <pulse/proplist.h>
 #include <pulse/pulseaudio.h>
+#include <sdbus-c++/sdbus-c++.h>
 #include <sstream>
 #include <vector>
 
 class Player {
 private:
   std::vector<std::pair<std::string, std::string>>
-      players; // Name: dbus interface
+      m_players; // Name: dbus interface
   std::vector<std::pair<std::string, unsigned short>>
-      devices; // Name: pulseaudio sink index
-  DBusConnection *dbus_conn = nullptr;
-  DBusError dbus_error;
-  unsigned int selected_player_id = -1;
-  bool play_pause_method = false;
-  bool pause_method = false;
-  bool play_method = false;
-  bool next_method = false;
-  bool previous_method = false;
-  bool setpos_method = false;
-  bool is_shuffle_prop = false;
-  bool is_pos_prop = false;
-  bool is_volume_prop = false;
-  bool is_playback_status_prop = false;
-  bool is_metadata_prop = false;
+      m_devices; // Name: pulseaudio sink index
+  std::unique_ptr<sdbus::IConnection> m_dbus_conn;
+  unsigned int m_selected_player_id = -1;
+  bool m_play_pause_method = false;
+  bool m_pause_method = false;
+  bool m_play_method = false;
+  bool m_next_method = false;
+  bool m_previous_method = false;
+  bool m_setpos_method = false;
+  bool m_is_shuffle_prop = false;
+  bool m_is_pos_prop = false;
+
+  bool m_is_volume_prop = false;
+  bool m_is_playback_status_prop = false;
+  bool m_is_metadata_prop = false;
 
 public:
   Player();
