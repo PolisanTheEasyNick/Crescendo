@@ -7,9 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(PkgConfig REQUIRED)
 
 
-pkg_check_modules(DBUS REQUIRED dbus-c++-1)
 pkg_check_modules(GTKMM REQUIRED gtkmm-4.0)
-
+pkg_check_modules(SDBUS REQUIRED sdbus-c++)
 
 include_directories(${GTKMM_INCLUDE_DIRS})
 link_directories(${GTKMM_LIBRARY_DIRS})
@@ -23,8 +22,8 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/icon.svg"
 
 add_executable(Crescendo player.h player.cpp helper.h playerwindow.h playerwindow.cpp volumebutton.h volumebutton.cpp main.cpp)
 
-target_include_directories(Crescendo PRIVATE ${DBUS_INCLUDE_DIRS})
-target_link_libraries(Crescendo PRIVATE ${DBUS_LIBRARIES} pugixml ${GTKMM_LIBRARIES})
+target_include_directories(Crescendo PRIVATE ${SDBUS_CXX_INCLUDE_DIRS})
+target_link_libraries(Crescendo PRIVATE pugixml sdbus-c++ ${GTKMM_LIBRARIES} ${SDBUS_LIBRARIES})
 
 find_package(PulseAudio)
 if (PulseAudio_FOUND)
