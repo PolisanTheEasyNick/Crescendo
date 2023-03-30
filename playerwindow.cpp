@@ -114,6 +114,17 @@ PlayerWindow::PlayerWindow() {
   m_device_choose_popover.signal_closed().connect(
       [this] { m_player_choose_popover.unparent(); });
   m_device_choose_popover.set_halign(Gtk::Align::FILL);
+
+#ifdef HAVE_PULSEAUDIO
+#else
+  // Code that doesn't uses PulseAudio
+  std::cout << "PulseAudio not installed, making button for choosing output "
+               "sound device unactive"
+            << std::endl;
+  m_device_choose_button.set_sensitive(false);
+  m_device_choose_button.set_tooltip_text(
+      "You must install pulseaudio library for this button");
+#endif
 }
 
 void PlayerWindow::on_playpause_clicked() {
@@ -214,6 +225,14 @@ void PlayerWindow::on_player_choosed(unsigned short player_index) {
 }
 
 void PlayerWindow::on_device_choose_clicked() {
+#ifdef HAVE_PULSEAUDIO
+  // Code thatuse PulseAudio
+  std::cout << "PulseAudio installed" << std::endl;
+#else
+  // Code that doesn't uses PulseAudio
+  std::cout << "PulseAudio not installed, can't continue." << std::endl;
+  return;
+#endif
   // Set up popover for device choose button
   m_device_choose_popover.set_parent(m_device_choose_button);
   Gtk::ListBox devices_list;

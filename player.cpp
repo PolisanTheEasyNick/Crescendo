@@ -1055,7 +1055,7 @@ Player::get_output_devices() {
 #else
   // Code that doesn't uses PulseAudio
   std::cout << "PulseAudio not installed, can't continue." << std::endl;
-  return false;
+  return {};
 #endif
   m_devices.clear();
   // Create a main loop and a new PulseAudio context
@@ -1120,7 +1120,7 @@ void Player::set_output_device(unsigned short output_sink_index) {
 #else
   // Code that doesn't uses PulseAudio
   std::cout << "PulseAudio not installed, can't continue." << std::endl;
-  return false;
+  return;
 #endif
   if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
     std::cout << "Player not selected, can't continue." << std::endl;
