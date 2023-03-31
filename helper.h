@@ -6,7 +6,7 @@
 
 class Helper {
 public:
-  static Helper &getInstance() {
+  static Helper &get_instance() {
     static Helper instance;
     return instance;
   }
