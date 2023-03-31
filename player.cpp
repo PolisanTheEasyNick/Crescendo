@@ -1,5 +1,7 @@
 #include "player.h"
 
+inline const char *const bool_to_string(bool b) { return b ? "true" : "false"; }
+
 Player::Player() {
 
   std::cout << "Trying to create " << std::endl;
@@ -15,10 +17,11 @@ Player::Player() {
                 << " at " << m_players[m_selected_player_id].second
                 << std::endl;
     };
+    get_song_data();
   }
 }
 
-Player::~Player() {}
+Player::~Player() { m_proxy_signal.reset(); }
 
 std::vector<std::pair<std::string, std::string>> Player::get_players() {
   m_players.clear();
@@ -285,6 +288,7 @@ bool Player::select_player(unsigned int new_id) {
     std::cout << "not found." << std::endl;
     m_is_metadata_prop = false;
   }
+  start_listening_signals();
 
   return true;
 }
@@ -552,6 +556,10 @@ int64_t Player::get_position() {
   }
 }
 
+std::string Player::get_position_str() {
+  return Helper::get_instance().format_time(get_position());
+}
+
 bool Player::set_position(int64_t pos) {
   if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
     std::cout << "Player not selected, can't continue." << std::endl;
@@ -589,6 +597,19 @@ bool Player::set_position(int64_t pos) {
     return false;
   }
   return false;
+}
+
+int64_t Player::get_song_length() {
+  auto metadata = get_metadata();
+  for (auto &info : metadata) {
+    if (info.first == "mpris:length") {
+      int64_t length = stoi(info.second);
+      if (m_players[m_selected_player_id].first == "Spotify")
+        length /= 1000000;
+      return length;
+    }
+  }
+  return 0;
 }
 
 double Player::get_volume() {
@@ -840,8 +861,6 @@ unsigned short Player::get_current_device_sink_index() {
   }
   return player_sink_id;
 }
-
-inline const char *const bool_to_string(bool b) { return b ? "true" : "false"; }
 
 std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
   if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
@@ -1279,3 +1298,368 @@ bool Player::get_is_playback_status_prop() const {
 bool Player::get_is_metadata_prop() const { return m_is_metadata_prop; }
 
 unsigned int Player::get_count_of_players() const { return m_players.size(); }
+
+void Player::start_listening_signals() {
+  m_proxy_signal.reset();
+  m_proxy_signal = sdbus::createProxy(*m_dbus_conn.get(),
+                                      m_players[m_selected_player_id].second,
+                                      "/org/mpris/MediaPlayer2");
+  m_proxy_signal->registerSignalHandler(
+      "org.freedesktop.DBus.Properties", "PropertiesChanged",
+      [this](sdbus::Signal &sig) { on_properties_changed(sig); });
+  m_proxy_signal->finishRegistration();
+
+  // Start the event loop in a new thread
+  m_dbus_conn->enterEventLoopAsync();
+  std::cout << "Event loop started" << std::endl;
+}
+
+void Player::on_properties_changed(sdbus::Signal &signal) {
+  std::map<std::string, int> property_map = {
+      {"Shuffle", 1},         // Shuffle
+      {"Metadata", 2},        // Changed song
+      {"Volume", 3},          // changed Volume
+      {"PlaybackStatus", 4}}; // paused or played
+
+  // Handle the PropertiesChanged signal
+  std::cout << "Prop changed" << std::endl;
+  std::string string_arg;
+  std::map<std::string, sdbus::Variant> properties;
+  std::vector<std::string> array_of_strings;
+  signal >> string_arg;
+  signal >> properties;
+  for (auto &prop : properties) {
+    std::cout << prop.first << std::endl;
+    switch (property_map[prop.first]) {
+    case 0: { // not mapped
+      std::cout << "Property \"" << prop.first << "\" not supported."
+                << std::endl;
+      return;
+    }
+    case 1: { // shuffle
+      std::cout << "Shuffle property changed, new value: "
+                << prop.second.get<bool>() << std::endl;
+      m_is_shuffle = prop.second.get<bool>();
+      notify_observers_is_shuffle_changed();
+      return;
+    }
+    case 2: { // metadata
+      std::cout << "Metadata property changed." << std::endl;
+      auto meta_v = prop.second.get<std::map<std::string, sdbus::Variant>>();
+      std::map<std::string, int> type_map = {{"n", 1},    // int16
+                                             {"q", 2},    // uint16
+                                             {"i", 3},    // int32
+                                             {"x", 4},    // int64
+                                             {"t", 5},    // uint64
+                                             {"d", 6},    // double
+                                             {"s", 7},    // string
+                                             {"o", 8},    // object path
+                                             {"b", 9},    // boolean
+                                             {"as", 10}}; // array of strings
+      std::vector<std::pair<std::string, std::string>> metadata;
+
+      for (auto &data : meta_v) {
+        std::string type = data.second.peekValueType();
+        switch (type_map[type]) {
+        case 0: {
+          std::cout << "Warning: not implemented parsing for type \"" << type
+                    << ", skipping " << data.first << std::endl;
+        }
+        case 1: { // int16
+          try {
+            int16_t num = data.second.get<int16_t>();
+            std::cout << data.first << ": " << num << std::endl;
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch int64: " << e.what()
+                      << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"n\" expected." << std::endl;
+            break;
+          }
+
+          break;
+        }
+        case 2: { // uint16
+          try {
+            uint16_t num = data.second.get<uint16_t>();
+            std::cout << data.first << ": " << num << std::endl;
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch uint64: " << e.what()
+                      << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"q\" expected." << std::endl;
+            break;
+          }
+
+          break;
+        }
+        case 3: { // int32
+          try {
+            int32_t num = data.second.get<int32_t>();
+            std::cout << data.first << ": " << num << std::endl;
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch int32_t: " << e.what()
+                      << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"i\" expected." << std::endl;
+            break;
+          }
+
+          break;
+        }
+        case 4: { // int64
+          try {
+            int64_t num = data.second.get<int64_t>();
+            std::cout << data.first << ": " << num << std::endl;
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch int64_t: " << e.what()
+                      << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"x\" expected." << std::endl;
+            break;
+          }
+
+          break;
+        }
+        case 5: { // uint64
+          try {
+            uint64_t num = data.second.get<uint64_t>();
+            std::cout << data.first << ": " << num << std::endl;
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch double: " << e.what()
+                      << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"d\" expected." << std::endl;
+            break;
+          }
+
+          break;
+        }
+        case 6: { // double
+          try {
+            double num = data.second.get<double>();
+            std::cout << data.first << ": " << num << std::endl;
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch uint64_t: " << e.what()
+                      << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"t\" expected." << std::endl;
+            break;
+          }
+
+          break;
+        }
+        case 7: { // string
+          try {
+            std::string str = data.second.get<std::string>();
+            std::cout << data.first << ": " << str << std::endl;
+            metadata.push_back(std::make_pair(data.first, str));
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch string: " << e.what()
+                      << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"s\" expected." << std::endl;
+            break;
+          }
+
+          break;
+        }
+        case 8: { // object path
+          try {
+            std::string path = data.second.get<sdbus::ObjectPath>();
+            std::cout << data.first << ": " << path << std::endl;
+            metadata.push_back(std::make_pair(data.first, path));
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch object path: " << e.what()
+                      << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"o\" expected." << std::endl;
+            break;
+          }
+          break;
+        }
+        case 9: { // boolean
+          try {
+            bool boolean = data.second.get<bool>();
+            std::cout << data.first << ": " << bool_to_string(boolean)
+                      << std::endl;
+            metadata.push_back(
+                std::make_pair(data.first, bool_to_string(boolean)));
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch string: " << e.what()
+                      << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"b\" expected." << std::endl;
+            break;
+          }
+          break;
+        }
+        case 10: { // array of strings
+          try {
+            std::vector<std::string> arr =
+                data.second.get<std::vector<std::string>>();
+            for (auto &entry : arr) {
+              std::cout << data.first << ": " << entry << std::endl;
+              metadata.push_back(std::make_pair(data.first, entry));
+            }
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch array of strings: "
+                      << e.what() << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"b\" expected." << std::endl;
+            break;
+          }
+          break;
+        }
+        default: {
+          std::cout << "Got not implemented data type: " << type
+                    << ", skipping " << data.first << std::endl;
+          break;
+        }
+        }
+      }
+
+      // set new song, new length, new author....
+      for (auto &info : metadata) {
+        if (info.first == "mpris:length") {
+          int64_t length = stoi(info.second);
+          if (m_players[m_selected_player_id].first == "Spotify")
+            length /= 1000000;
+          m_song_length = Helper::get_instance().format_time(length);
+          notify_observers_song_length_changed();
+          std::cout << "Song length: " << m_song_length << std::endl;
+        } else if (info.first == "xesam:artist") {
+          m_song_author = info.second;
+          notify_observers_song_author_changed();
+        } else if (info.first == "xesam:title") {
+          m_song_name = info.second;
+          notify_observers_song_name_changed();
+        }
+      }
+      return;
+    }
+    case 3: { // Volume property
+      std::cout << "Volume property changed, new value: "
+                << prop.second.get<double>() << std::endl;
+      m_song_volume = prop.second.get<double>();
+      notify_observers_song_volume_changed();
+      return;
+    }
+    case 4: { // PlaybackStatus
+      std::cout << "PlaybackStatus property changed, new value: "
+                << prop.second.get<std::string>() << std::endl;
+      m_is_playing = prop.second.get<std::string>() == "Playing";
+      notify_observers_is_playing_changed();
+      return;
+    }
+    }
+  }
+}
+
+void Player::add_observer(PlayerObserver *observer) {
+  m_observers.push_back(observer);
+}
+
+void Player::remove_observer(PlayerObserver *observer) {
+  m_observers.erase(
+      std::remove(m_observers.begin(), m_observers.end(), observer),
+      m_observers.end());
+}
+
+std::string Player::get_song_name() const { return m_song_name; }
+
+void Player::set_song_name(const std::string &new_song_name) {
+  m_song_name = new_song_name;
+  notify_observers_song_name_changed();
+}
+
+std::string Player::get_song_author() const { return m_song_author; }
+
+void Player::set_song_author(const std::string &new_song_author) {
+  m_song_author = new_song_author;
+  notify_observers_song_author_changed();
+}
+
+std::string Player::get_song_length_str() const { return m_song_length; }
+
+void Player::set_song_length(const std::string &new_song_length) {
+  m_song_length = new_song_length;
+  notify_observers_song_length_changed();
+}
+
+void Player::get_song_data() {
+  auto metadata = get_metadata();
+  for (auto &info : metadata) {
+    if (info.first == "mpris:length") {
+      int64_t length = stoi(info.second);
+      if (m_players[m_selected_player_id].first == "Spotify")
+        length /= 1000000;
+      m_song_length = Helper::get_instance().format_time(length);
+      notify_observers_song_length_changed();
+      std::cout << "Song length: " << m_song_length << std::endl;
+    } else if (info.first == "xesam:artist") {
+      m_song_author = info.second;
+      notify_observers_song_author_changed();
+    } else if (info.first == "xesam:title") {
+      m_song_name = info.second;
+      notify_observers_song_name_changed();
+    }
+  }
+  m_is_shuffle = get_shuffle();
+  notify_observers_is_shuffle_changed();
+  m_is_playing = get_playback_status();
+  notify_observers_is_playing_changed();
+  m_song_volume = get_volume();
+  notify_observers_song_volume_changed();
+  m_song_pos = get_position_str();
+
+  notify_observers_song_position_changed();
+}
+
+void Player::notify_observers_song_name_changed() {
+  for (auto observer : m_observers) {
+    observer->on_song_name_changed(m_song_name);
+  }
+}
+
+void Player::notify_observers_song_author_changed() {
+  for (auto observer : m_observers) {
+    observer->on_song_author_changed(m_song_author);
+  }
+}
+
+void Player::notify_observers_song_length_changed() {
+  for (auto observer : m_observers) {
+    observer->on_song_length_changed(m_song_length);
+  }
+}
+
+void Player::notify_observers_is_shuffle_changed() {
+  for (auto observer : m_observers) {
+    observer->on_is_shuffle_changed(m_is_shuffle);
+  }
+}
+
+void Player::notify_observers_is_playing_changed() {
+  for (auto observer : m_observers) {
+    observer->on_is_playing_changed(m_is_playing);
+  }
+}
+
+void Player::notify_observers_song_volume_changed() {
+  for (auto observer : m_observers) {
+    observer->on_song_volume_changed(m_song_volume);
+  }
+}
+
+void Player::notify_observers_song_position_changed() {
+  for (auto observer : m_observers) {
+    observer->on_song_position_changed(m_song_pos);
+  }
+}

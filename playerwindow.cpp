@@ -7,7 +7,6 @@ PlayerWindow::PlayerWindow() {
   } else {
     m_shuffle_button.get_style_context()->remove_class("shuffle-enabled");
   }
-  check_buttons_features();
   bool is_playing = m_player.get_playback_status();
   if (!is_playing) {
     m_playpause_button.set_icon_name("media-playback-start");
@@ -15,7 +14,6 @@ PlayerWindow::PlayerWindow() {
     m_playpause_button.set_icon_name("media-playback-pause");
   }
   if (m_player.get_is_volume_prop()) {
-    std::cout << "Player changed, new player volume: ";
     double volume = m_player.get_volume();
     std::cout << volume << std::endl;
     m_volume_bar_scale_button.set_value(volume);
@@ -28,7 +26,7 @@ PlayerWindow::PlayerWindow() {
   set_child(m_main_grid);
   // main_grid.set_row_homogeneous(true);
   m_main_grid.set_column_homogeneous(true);
-  m_main_grid.set_margin(20);
+  m_main_grid.set_margin(15);
 
   m_shuffle_button.set_icon_name("media-playlist-shuffle");
   m_prev_button.set_icon_name("media-skip-backward");
@@ -49,7 +47,11 @@ PlayerWindow::PlayerWindow() {
 
   m_volume_bar_scale_button.set_orientation(Gtk::Orientation::VERTICAL);
   m_volume_bar_scale_button.signal_value_changed().connect(
-      [this](double value) { m_player.set_volume(value); });
+      [this](double value) {
+        if (m_lock_changing)
+          return;
+        m_player.set_volume(value);
+      });
   m_volume_and_player_box.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_volume_and_player_box.set_halign(Gtk::Align::END);
   m_volume_and_player_box.set_valign(Gtk::Align::CENTER);
@@ -75,6 +77,8 @@ PlayerWindow::PlayerWindow() {
   //  });
   //  progress_bar_song_scale.add_controller(gesture_click);
   m_progress_bar_song_scale.signal_value_changed().connect([&]() {
+    if (m_lock_changing)
+      return;
     double position = m_progress_bar_song_scale.get_value();
     uint64_t song_length = -1;
     auto metadata = m_player.get_metadata();
@@ -91,10 +95,37 @@ PlayerWindow::PlayerWindow() {
     m_player.set_position(position * song_length);
   });
 
-  m_song_name_label.set_label("1");
+  m_song_name_label.set_label("song");
   m_song_name_label.set_halign(Gtk::Align::START);
   m_song_name_label.set_valign(Gtk::Align::CENTER);
-  m_main_grid.attach(m_song_name_label, 0, 1);
+  m_song_name_label.set_ellipsize(Pango::EllipsizeMode::END);
+  m_song_author_label.set_label("author");
+  m_song_author_label.set_halign(Gtk::Align::START);
+  m_song_author_label.set_valign(Gtk::Align::CENTER);
+  m_song_name_label.set_ellipsize(Pango::EllipsizeMode::END);
+  m_song_name_list.append(m_song_name_label);
+  m_song_name_list.append(m_song_author_label);
+  m_song_name_list.set_activate_on_single_click(false);
+  m_song_name_list.set_selection_mode(Gtk::SelectionMode::NONE);
+  m_song_name_label.set_can_target(false);
+  m_song_author_label.set_can_target(false);
+  m_song_name_list.set_can_target(false);
+  m_song_name_label.set_focusable(false);
+  m_song_author_label.set_focusable(false);
+  m_song_name_list.set_can_focus(false);
+
+  m_current_pos_label.set_label("0:00");
+  m_current_pos_label.set_halign(Gtk::Align::START);
+  m_current_pos_label.set_valign(Gtk::Align::CENTER);
+
+  m_song_length_label.set_label("0:00");
+  m_song_length_label.set_halign(Gtk::Align::END);
+  m_song_length_label.set_valign(Gtk::Align::CENTER);
+
+  m_progress_bar_song_scale.set_margin_start(40);
+  m_progress_bar_song_scale.set_margin_end(40);
+
+  m_main_grid.attach(m_song_name_list, 0, 1);
   m_playpause_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_playpause_clicked));
   m_prev_button.signal_clicked().connect(
@@ -110,6 +141,8 @@ PlayerWindow::PlayerWindow() {
 
   m_main_grid.attach(m_control_buttons_box, 1, 1);
   m_main_grid.attach(m_volume_and_player_box, 2, 1);
+  m_main_grid.attach(m_current_pos_label, 0, 0);
+  m_main_grid.attach(m_song_length_label, 2, 0);
   m_main_grid.attach(m_progress_bar_song_scale, 0, 0, 3, 1);
 
   // add shuffle css for changing colors if shuffle enabled
@@ -133,6 +166,9 @@ PlayerWindow::PlayerWindow() {
   m_device_choose_popover.signal_closed().connect(
       [this] { m_player_choose_popover.unparent(); });
   m_device_choose_popover.set_halign(Gtk::Align::FILL);
+
+  m_playpause_button.grab_focus();
+
 #ifdef HAVE_PULSEAUDIO
 #else
   // Code that doesn't uses PulseAudio
@@ -143,17 +179,12 @@ PlayerWindow::PlayerWindow() {
   m_device_choose_button.set_tooltip_text(
       "You must install pulseaudio library for this button");
 #endif
+  m_player.start_listening_signals();
+  m_player.add_observer(this);
+  m_player.get_song_data();
 }
 
-void PlayerWindow::on_playpause_clicked() {
-  bool is_playing = m_player.get_playback_status();
-  bool success = m_player.send_play_pause();
-  if (is_playing && success) {
-    m_playpause_button.set_icon_name("media-playback-start");
-  } else if (!is_playing && success) {
-    m_playpause_button.set_icon_name("media-playback-pause");
-  }
-}
+void PlayerWindow::on_playpause_clicked() { m_player.send_play_pause(); }
 
 void PlayerWindow::on_prev_clicked() { m_player.send_previous(); }
 
@@ -161,23 +192,10 @@ void PlayerWindow::on_next_clicked() { m_player.send_next(); }
 
 void PlayerWindow::on_shuffle_clicked() {
   bool current_shuffle = m_player.get_shuffle();
-  bool success = m_player.set_shuffle(!current_shuffle);
-  if (!current_shuffle && success) {
-    auto style_context = m_shuffle_button.get_style_context();
-    style_context->add_class("shuffle-enabled");
-  } else if (current_shuffle && success) {
-    auto style_context = m_shuffle_button.get_style_context();
-    style_context->remove_class("shuffle-enabled");
-  }
+  m_player.set_shuffle(!current_shuffle);
 }
 
 void PlayerWindow::on_player_choose_clicked() {
-  if (!m_player_choose_popover.get_visible()) {
-    std::cout << "Not visible" << std::endl;
-  } else {
-    std::cout << "Visiable" << std::endl;
-  }
-  // Set up popover for playerc choose button
   m_player_choose_popover.set_parent(m_player_choose_button);
   Gtk::ListBox players_list;
   players_list.set_margin_bottom(5);
