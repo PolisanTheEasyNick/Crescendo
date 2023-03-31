@@ -21,7 +21,7 @@ PlayerWindow::PlayerWindow() {
 
   set_icon_name("org.polisan.crescendo");
   set_default_icon_name("org.polisan.crescendo");
-  set_title("Universal Player");
+  set_title("Crescendo");
   set_default_size(500, 100);
   set_child(m_main_grid);
   // main_grid.set_row_homogeneous(true);
@@ -48,7 +48,7 @@ PlayerWindow::PlayerWindow() {
   m_volume_bar_scale_button.set_orientation(Gtk::Orientation::VERTICAL);
   m_volume_bar_scale_button.signal_value_changed().connect(
       [this](double value) {
-        if (m_lock_changing)
+        if (m_lock_volume_changing)
           return;
         m_player.set_volume(value);
       });
@@ -64,37 +64,31 @@ PlayerWindow::PlayerWindow() {
   m_progress_bar_song_scale.set_valign(Gtk::Align::END);
   m_progress_bar_song_scale.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_progress_bar_song_scale.set_adjustment(Gtk::Adjustment::create(0.5, 0, 1));
-  /* GTK4 is missing pressed/released signals for GtkRange/GtkScale.
-   * We need to wait when GTK4 command will fix this bug
-     https://gitlab.gnome.org/GNOME/gtk/-/issues/4939  */
-
-  //  auto gesture_click = Gtk::GestureClick::create();
-  //  gesture_click->signal_pressed().connect([](int, double, double) {
-  //    std::cout << "Left mouse button clicked!" << std::endl;
-  //  });
-  //  gesture_click->signal_released().connect([](int, double, double) {
-  //    std::cout << "Left mouse button released!" << std::endl;
-  //  });
-  //  progress_bar_song_scale.add_controller(gesture_click);
-  m_progress_bar_song_scale.signal_value_changed().connect([&]() {
-    if (m_lock_changing)
-      return;
-    double position = m_progress_bar_song_scale.get_value();
-    uint64_t song_length = -1;
-    auto metadata = m_player.get_metadata();
-    auto it = std::find_if(
-        metadata.begin(), metadata.end(),
-        [song_length](const auto &p) { return p.first == "mpris:length"; });
-    if (it != metadata.end()) {
-      song_length = std::stoul(it->second);
-    } else {
-      std::cout << "Can't get maximum length of song! Can't continue."
-                << std::endl;
-      return;
+  auto controllers = m_progress_bar_song_scale.observe_controllers();
+  GListModel *model = controllers->gobj();
+  int n_controllers = g_list_model_get_n_items(model);
+  for (int i = 0; i < n_controllers; i++) {
+    g_list_model_get_item(model, i);
+    GObject *controller_gobj = (GObject *)g_list_model_get_item(model, i);
+    auto click_controller = Glib::wrap(controller_gobj, false);
+    auto gesture_click =
+        dynamic_cast<Gtk::GestureClick *>(click_controller.get());
+    if (gesture_click) {
+      gesture_click->set_button(0);
+      gesture_click->signal_pressed().connect(
+          [this](int, double, double) { m_wait = true; });
+      gesture_click->signal_released().connect([this](int, double, double) {
+        if (m_lock_pos_changing)
+          return;
+        double position = m_progress_bar_song_scale.get_value();
+        uint64_t song_length = m_player.get_song_length();
+        m_lock_pos_changing = true;
+        m_player.set_position(position * song_length * 1000000);
+        m_lock_pos_changing = false;
+        m_wait = false;
+      });
     }
-    m_player.set_position(position * song_length);
-  });
-
+  }
   m_song_name_label.set_label("song");
   m_song_name_label.set_halign(Gtk::Align::START);
   m_song_name_label.set_valign(Gtk::Align::CENTER);
@@ -168,6 +162,13 @@ PlayerWindow::PlayerWindow() {
   m_device_choose_popover.set_halign(Gtk::Align::FILL);
 
   m_playpause_button.grab_focus();
+
+  stop_flag = false;
+  if (m_player.get_playback_status()) {
+    // Start the idle handler to update the position
+    m_position_thread =
+        std::thread(&PlayerWindow::update_position_thread, this);
+  }
 
 #ifdef HAVE_PULSEAUDIO
 #else
@@ -258,6 +259,9 @@ void PlayerWindow::on_player_choosed(unsigned short player_index) {
     std::cout << volume << std::endl;
     m_volume_bar_scale_button.set_value(volume);
   }
+
+  m_player.get_song_data();
+  m_player.start_listening_signals();
 }
 
 void PlayerWindow::on_device_choose_clicked() {
@@ -346,14 +350,66 @@ void PlayerWindow::check_buttons_features() {
   } else {
     m_shuffle_button.set_sensitive(false);
   }
+
   if (m_player.get_is_pos_prop()) {
-    // update time of song
   } else {
-    // not update time of song
   }
   if (m_player.get_is_volume_prop()) {
     m_volume_bar_scale_button.set_sensitive(true);
   } else {
     m_volume_bar_scale_button.set_sensitive(false);
+  }
+}
+
+void PlayerWindow::update_position_thread() {
+  std::cout << "Started tracking position" << std::endl;
+  while (!stop_flag) {
+    {
+      if (m_wait) {
+        continue;
+      }
+      std::lock_guard<std::mutex> lock(m_mutex);
+      // Access shared resources here
+      if (!m_player.get_playback_status()) {
+        std::cout << "Current playback status: "
+                  << m_player.get_playback_status() << std::endl;
+        std::cout << "Breaking" << std::endl;
+        break;
+      }
+      double current_pos = m_player.get_position();
+      std::cout << "Current pos: " << current_pos << ", "
+                << m_player.get_position_str() << std::endl;
+      m_current_pos_label.set_label(m_player.get_position_str());
+      m_lock_pos_changing = true;
+      m_progress_bar_song_scale.set_value(current_pos /
+                                          m_player.get_song_length());
+      m_progress_bar_song_scale.queue_draw();
+      m_main_grid.queue_draw();
+      m_lock_pos_changing = false;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+  std::cout << "Thread stopped" << std::endl;
+}
+
+void PlayerWindow::pause_position_thread() {
+  stop_flag = true;
+  if (m_position_thread.joinable()) {
+    m_position_thread.join();
+  }
+}
+
+void PlayerWindow::resume_position_thread() {
+  if (!m_position_thread.joinable()) {
+    m_position_thread =
+        std::thread(&PlayerWindow::update_position_thread, this);
+  }
+  stop_flag = false;
+}
+
+void PlayerWindow::stop_position_thread() {
+  stop_flag = true;
+  if (m_position_thread.joinable()) {
+    m_position_thread.join();
   }
 }

@@ -3,12 +3,16 @@
 
 #include "player.h"
 #include "volumebutton.h"
+#include <atomic>
+#include <chrono>
+#include <glib.h>
 #include <gtkmm/application.h>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/gesturelongpress.h>
 #include <gtkmm/grid.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
@@ -18,11 +22,17 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/togglebutton.h>
 #include <gtkmm/viewport.h>
+#include <mutex>
+#include <sigc++/signal.h>
+#include <thread>
 
 class PlayerWindow : public Gtk::ApplicationWindow, public PlayerObserver {
 public:
   PlayerWindow();
-  virtual ~PlayerWindow() {}
+  virtual ~PlayerWindow() {
+    // Stop the position thread
+    stop_position_thread();
+  }
   void on_song_name_changed(const std::string &new_song) override {
     std::cout << "New song name PlayerWindow: " << new_song << std::endl;
     m_song_name_label.set_label(new_song);
@@ -49,30 +59,35 @@ public:
   void on_is_playing_changed(const bool &new_is_playing) override {
     std::cout << "New song isplaying PlayerWindow: " << new_is_playing
               << std::endl;
+    std::lock_guard<std::mutex> lock(m_mutex);
     if (new_is_playing) {
-      m_playpause_button.set_icon_name("media-playback-pause");
-      // start some code for updating pos real-time
+      // Resume the position thread
+      resume_position_thread();
+      m_playpause_button.set_icon_name("media-pause");
     } else {
-      m_playpause_button.set_icon_name("media-playback-start");
+      // Pause the position thread
+      pause_position_thread();
+      m_playpause_button.set_icon_name("media-play");
     }
   }
   void on_song_volume_changed(const double &new_song_volume) override {
     std::cout << "New song volume PlayerWindow: " << new_song_volume
               << std::endl;
-    m_lock_changing = true;
+    m_lock_volume_changing = true;
     m_volume_bar_scale_button.set_value(new_song_volume);
-    m_lock_changing = false;
+    m_lock_volume_changing = false;
   }
 
-  void on_song_position_changed(const std::string &new_song_pos) override {
+  void on_song_position_changed(const uint64_t &new_song_pos) override {
     std::cout << "New song pos: " << new_song_pos << std::endl;
-    m_current_pos_label.set_label(new_song_pos);
+    m_current_pos_label.set_label(
+        Helper::get_instance().format_time(new_song_pos));
     double pos = m_player.get_position();
     double len = m_player.get_song_length();
     double new_pos = pos / len;
-    m_lock_changing = true;
+    m_lock_pos_changing = true;
     m_progress_bar_song_scale.set_value(new_pos);
-    m_lock_changing = false;
+    m_lock_pos_changing = false;
   }
 
 protected:
@@ -90,12 +105,20 @@ protected:
   VolumeButton m_volume_bar_scale_button;
   Gtk::Popover m_player_choose_popover, m_device_choose_popover;
   Gtk::ListBox m_song_name_list;
+  std::atomic_bool stop_flag{false}; // Flag to signal thread to stop
+  std::mutex m_mutex;                // Mutex to protect shared resources
+  std::thread m_position_thread;     // Thread for updating position
+  bool m_wait = false;               // Whether there is need to suspend thread
 
 private:
   void check_buttons_features();
   void on_player_choosed(unsigned short);
   void on_device_choosed(unsigned short);
-  bool m_lock_changing = false;
+  bool m_lock_pos_changing = false, m_lock_volume_changing = false;
+  void update_position_thread();
+  void pause_position_thread();
+  void resume_position_thread();
+  void stop_position_thread();
 };
 
 #endif // PLAYERWINDOW_H

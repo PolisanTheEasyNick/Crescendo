@@ -21,7 +21,7 @@ public:
   virtual void on_is_shuffle_changed(const bool &new_is_shuffle) = 0;
   virtual void on_is_playing_changed(const bool &new_is_playing) = 0;
   virtual void on_song_volume_changed(const double &new_song_volume) = 0;
-  virtual void on_song_position_changed(const std::string &new_song_pos) = 0;
+  virtual void on_song_position_changed(const uint64_t &new_song_pos) = 0;
 };
 
 class Player {
@@ -47,17 +47,10 @@ private:
   bool m_is_playback_status_prop = false;
   bool m_is_metadata_prop = false;
 
-  std::string m_song_name, m_song_author, m_song_length, m_song_pos;
+  std::string m_song_name, m_song_author, m_song_length_str;
+  uint64_t m_song_pos, m_song_length;
   bool m_is_shuffle, m_is_playing;
   double m_song_volume;
-
-  void notify_observers_song_name_changed();
-  void notify_observers_song_author_changed();
-  void notify_observers_song_length_changed();
-  void notify_observers_is_shuffle_changed();
-  void notify_observers_is_playing_changed();
-  void notify_observers_song_volume_changed();
-  void notify_observers_song_position_changed();
 
 public:
   Player();
@@ -76,7 +69,7 @@ public:
   int64_t get_position();
   std::string get_position_str();
   bool set_position(int64_t pos);
-  int64_t get_song_length();
+  uint64_t get_song_length();
   double get_volume();
   bool set_volume(double volume);
   bool get_playback_status();
@@ -101,6 +94,7 @@ public:
 
   void start_listening_signals();
   void on_properties_changed(sdbus::Signal &signal);
+  void on_seeked(sdbus::Signal &signal);
   void add_observer(PlayerObserver *observer);
   void remove_observer(PlayerObserver *observer);
   std::string get_song_name() const;
@@ -110,6 +104,14 @@ public:
   std::string get_song_length_str() const;
   void set_song_length(const std::string &new_song_length);
   void get_song_data();
+
+  void notify_observers_song_name_changed();
+  void notify_observers_song_author_changed();
+  void notify_observers_song_length_changed();
+  void notify_observers_is_shuffle_changed();
+  void notify_observers_is_playing_changed();
+  void notify_observers_song_volume_changed();
+  void notify_observers_song_position_changed();
 };
 
 #endif // PLAYER_H

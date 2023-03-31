@@ -599,14 +599,12 @@ bool Player::set_position(int64_t pos) {
   return false;
 }
 
-int64_t Player::get_song_length() {
+uint64_t Player::get_song_length() {
   auto metadata = get_metadata();
   for (auto &info : metadata) {
     if (info.first == "mpris:length") {
       int64_t length = stoi(info.second);
-      if (m_players[m_selected_player_id].first == "Spotify")
-        length /= 1000000;
-      return length;
+      return length / 1000000;
     }
   }
   return 0;
@@ -896,27 +894,28 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
     std::map<std::string, int> type_map = {{"n", 1},    // int16
                                            {"q", 2},    // uint16
                                            {"i", 3},    // int32
-                                           {"x", 4},    // int64
-                                           {"t", 5},    // uint64
-                                           {"d", 6},    // double
-                                           {"s", 7},    // string
-                                           {"o", 8},    // object path
-                                           {"b", 9},    // boolean
-                                           {"as", 10}}; // array of strings
+                                           {"u", 4},    // uint32
+                                           {"x", 5},    // int64
+                                           {"t", 6},    // uint64
+                                           {"d", 7},    // double
+                                           {"s", 8},    // string
+                                           {"o", 9},    // object path
+                                           {"b", 10},   // boolean
+                                           {"as", 11}}; // array of strings
 
     for (auto &data : meta) {
       std::string type = data.second.peekValueType();
       switch (type_map[type]) {
       case 0: {
         std::cout << "Warning: not implemented parsing for type \"" << type
-                  << ", skipping " << data.first << std::endl;
+                  << "\", skipping " << data.first << std::endl;
       }
       case 1: { // int16
         try {
           int16_t num = data.second.get<int16_t>();
           metadata.push_back(std::make_pair(data.first, std::to_string(num)));
         } catch (const sdbus::Error &e) {
-          std::cout << "Error while trying to fetch int64: " << e.what()
+          std::cout << "Error while trying to fetch int16: " << e.what()
                     << std::endl;
           std::cout << "Received type: \"" << type << "\" while \"n\" expected."
                     << std::endl;
@@ -930,7 +929,7 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
           uint16_t num = data.second.get<uint16_t>();
           metadata.push_back(std::make_pair(data.first, std::to_string(num)));
         } catch (const sdbus::Error &e) {
-          std::cout << "Error while trying to fetch uint64: " << e.what()
+          std::cout << "Error while trying to fetch uint16: " << e.what()
                     << std::endl;
           std::cout << "Received type: \"" << type << "\" while \"q\" expected."
                     << std::endl;
@@ -944,7 +943,7 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
           int32_t num = data.second.get<int32_t>();
           metadata.push_back(std::make_pair(data.first, std::to_string(num)));
         } catch (const sdbus::Error &e) {
-          std::cout << "Error while trying to fetch int32_t: " << e.what()
+          std::cout << "Error while trying to fetch int32: " << e.what()
                     << std::endl;
           std::cout << "Received type: \"" << type << "\" while \"i\" expected."
                     << std::endl;
@@ -953,12 +952,26 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
 
         break;
       }
-      case 4: { // int64
+      case 4: { // uint32
+        try {
+          uint32_t num = data.second.get<uint32_t>();
+          metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+        } catch (const sdbus::Error &e) {
+          std::cout << "Error while trying to fetch uint32: " << e.what()
+                    << std::endl;
+          std::cout << "Received type: \"" << type << "\" while \"i\" expected."
+                    << std::endl;
+          break;
+        }
+
+        break;
+      }
+      case 5: { // int64
         try {
           int64_t num = data.second.get<int64_t>();
           metadata.push_back(std::make_pair(data.first, std::to_string(num)));
         } catch (const sdbus::Error &e) {
-          std::cout << "Error while trying to fetch int64_t: " << e.what()
+          std::cout << "Error while trying to fetch int64: " << e.what()
                     << std::endl;
           std::cout << "Received type: \"" << type << "\" while \"x\" expected."
                     << std::endl;
@@ -967,12 +980,12 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
 
         break;
       }
-      case 5: { // uint64
+      case 6: { // uint64
         try {
           uint64_t num = data.second.get<uint64_t>();
           metadata.push_back(std::make_pair(data.first, std::to_string(num)));
         } catch (const sdbus::Error &e) {
-          std::cout << "Error while trying to fetch double: " << e.what()
+          std::cout << "Error while trying to fetch uint64: " << e.what()
                     << std::endl;
           std::cout << "Received type: \"" << type << "\" while \"d\" expected."
                     << std::endl;
@@ -981,12 +994,12 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
 
         break;
       }
-      case 6: { // double
+      case 7: { // double
         try {
           double num = data.second.get<double>();
           metadata.push_back(std::make_pair(data.first, std::to_string(num)));
         } catch (const sdbus::Error &e) {
-          std::cout << "Error while trying to fetch uint64_t: " << e.what()
+          std::cout << "Error while trying to fetch double: " << e.what()
                     << std::endl;
           std::cout << "Received type: \"" << type << "\" while \"t\" expected."
                     << std::endl;
@@ -995,7 +1008,7 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
 
         break;
       }
-      case 7: { // string
+      case 8: { // string
         try {
           std::string str = data.second.get<std::string>();
           metadata.push_back(std::make_pair(data.first, str));
@@ -1009,7 +1022,7 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
 
         break;
       }
-      case 8: { // object path
+      case 9: { // object path
         try {
           std::string path = data.second.get<sdbus::ObjectPath>();
           metadata.push_back(std::make_pair(data.first, path));
@@ -1022,13 +1035,13 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
         }
         break;
       }
-      case 9: { // boolean
+      case 10: { // boolean
         try {
           bool boolean = data.second.get<bool>();
           metadata.push_back(
               std::make_pair(data.first, bool_to_string(boolean)));
         } catch (const sdbus::Error &e) {
-          std::cout << "Error while trying to fetch string: " << e.what()
+          std::cout << "Error while trying to fetch boolean: " << e.what()
                     << std::endl;
           std::cout << "Received type: \"" << type << "\" while \"b\" expected."
                     << std::endl;
@@ -1036,7 +1049,7 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
         }
         break;
       }
-      case 10: { // array of strings
+      case 11: { // array of strings
         try {
           std::vector<std::string> arr =
               data.second.get<std::vector<std::string>>();
@@ -1307,6 +1320,9 @@ void Player::start_listening_signals() {
   m_proxy_signal->registerSignalHandler(
       "org.freedesktop.DBus.Properties", "PropertiesChanged",
       [this](sdbus::Signal &sig) { on_properties_changed(sig); });
+  m_proxy_signal->registerSignalHandler(
+      "org.mpris.MediaPlayer2.Player", "Seeked",
+      [this](sdbus::Signal &sig) { on_seeked(sig); });
   m_proxy_signal->finishRegistration();
 
   // Start the event loop in a new thread
@@ -1349,13 +1365,14 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
       std::map<std::string, int> type_map = {{"n", 1},    // int16
                                              {"q", 2},    // uint16
                                              {"i", 3},    // int32
-                                             {"x", 4},    // int64
-                                             {"t", 5},    // uint64
-                                             {"d", 6},    // double
-                                             {"s", 7},    // string
-                                             {"o", 8},    // object path
-                                             {"b", 9},    // boolean
-                                             {"as", 10}}; // array of strings
+                                             {"u", 4},    // uint32
+                                             {"x", 5},    // int64
+                                             {"t", 6},    // uint64
+                                             {"d", 7},    // double
+                                             {"s", 8},    // string
+                                             {"o", 9},    // object path
+                                             {"b", 10},   // boolean
+                                             {"as", 11}}; // array of strings
       std::vector<std::pair<std::string, std::string>> metadata;
 
       for (auto &data : meta_v) {
@@ -1363,7 +1380,7 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
         switch (type_map[type]) {
         case 0: {
           std::cout << "Warning: not implemented parsing for type \"" << type
-                    << ", skipping " << data.first << std::endl;
+                    << "\", skipping " << data.first << std::endl;
         }
         case 1: { // int16
           try {
@@ -1371,7 +1388,7 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
             std::cout << data.first << ": " << num << std::endl;
             metadata.push_back(std::make_pair(data.first, std::to_string(num)));
           } catch (const sdbus::Error &e) {
-            std::cout << "Error while trying to fetch int64: " << e.what()
+            std::cout << "Error while trying to fetch int16: " << e.what()
                       << std::endl;
             std::cout << "Received type: \"" << type
                       << "\" while \"n\" expected." << std::endl;
@@ -1386,7 +1403,7 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
             std::cout << data.first << ": " << num << std::endl;
             metadata.push_back(std::make_pair(data.first, std::to_string(num)));
           } catch (const sdbus::Error &e) {
-            std::cout << "Error while trying to fetch uint64: " << e.what()
+            std::cout << "Error while trying to fetch uint16: " << e.what()
                       << std::endl;
             std::cout << "Received type: \"" << type
                       << "\" while \"q\" expected." << std::endl;
@@ -1401,7 +1418,7 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
             std::cout << data.first << ": " << num << std::endl;
             metadata.push_back(std::make_pair(data.first, std::to_string(num)));
           } catch (const sdbus::Error &e) {
-            std::cout << "Error while trying to fetch int32_t: " << e.what()
+            std::cout << "Error while trying to fetch int32: " << e.what()
                       << std::endl;
             std::cout << "Received type: \"" << type
                       << "\" while \"i\" expected." << std::endl;
@@ -1410,13 +1427,28 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
 
           break;
         }
-        case 4: { // int64
+        case 4: { // uint32
+          try {
+            uint32_t num = data.second.get<uint32_t>();
+            std::cout << data.first << ": " << num << std::endl;
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            std::cout << "Error while trying to fetch uint32: " << e.what()
+                      << std::endl;
+            std::cout << "Received type: \"" << type
+                      << "\" while \"i\" expected." << std::endl;
+            break;
+          }
+
+          break;
+        }
+        case 5: { // int64
           try {
             int64_t num = data.second.get<int64_t>();
             std::cout << data.first << ": " << num << std::endl;
             metadata.push_back(std::make_pair(data.first, std::to_string(num)));
           } catch (const sdbus::Error &e) {
-            std::cout << "Error while trying to fetch int64_t: " << e.what()
+            std::cout << "Error while trying to fetch int64: " << e.what()
                       << std::endl;
             std::cout << "Received type: \"" << type
                       << "\" while \"x\" expected." << std::endl;
@@ -1425,13 +1457,13 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
 
           break;
         }
-        case 5: { // uint64
+        case 6: { // uint64
           try {
             uint64_t num = data.second.get<uint64_t>();
             std::cout << data.first << ": " << num << std::endl;
             metadata.push_back(std::make_pair(data.first, std::to_string(num)));
           } catch (const sdbus::Error &e) {
-            std::cout << "Error while trying to fetch double: " << e.what()
+            std::cout << "Error while trying to fetch uint64: " << e.what()
                       << std::endl;
             std::cout << "Received type: \"" << type
                       << "\" while \"d\" expected." << std::endl;
@@ -1440,13 +1472,13 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
 
           break;
         }
-        case 6: { // double
+        case 7: { // double
           try {
             double num = data.second.get<double>();
             std::cout << data.first << ": " << num << std::endl;
             metadata.push_back(std::make_pair(data.first, std::to_string(num)));
           } catch (const sdbus::Error &e) {
-            std::cout << "Error while trying to fetch uint64_t: " << e.what()
+            std::cout << "Error while trying to fetch double: " << e.what()
                       << std::endl;
             std::cout << "Received type: \"" << type
                       << "\" while \"t\" expected." << std::endl;
@@ -1455,7 +1487,7 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
 
           break;
         }
-        case 7: { // string
+        case 8: { // string
           try {
             std::string str = data.second.get<std::string>();
             std::cout << data.first << ": " << str << std::endl;
@@ -1470,7 +1502,7 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
 
           break;
         }
-        case 8: { // object path
+        case 9: { // object path
           try {
             std::string path = data.second.get<sdbus::ObjectPath>();
             std::cout << data.first << ": " << path << std::endl;
@@ -1484,7 +1516,7 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
           }
           break;
         }
-        case 9: { // boolean
+        case 10: { // boolean
           try {
             bool boolean = data.second.get<bool>();
             std::cout << data.first << ": " << bool_to_string(boolean)
@@ -1492,7 +1524,7 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
             metadata.push_back(
                 std::make_pair(data.first, bool_to_string(boolean)));
           } catch (const sdbus::Error &e) {
-            std::cout << "Error while trying to fetch string: " << e.what()
+            std::cout << "Error while trying to fetch boolean: " << e.what()
                       << std::endl;
             std::cout << "Received type: \"" << type
                       << "\" while \"b\" expected." << std::endl;
@@ -1500,7 +1532,7 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
           }
           break;
         }
-        case 10: { // array of strings
+        case 11: { // array of strings
           try {
             std::vector<std::string> arr =
                 data.second.get<std::vector<std::string>>();
@@ -1529,11 +1561,10 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
       for (auto &info : metadata) {
         if (info.first == "mpris:length") {
           int64_t length = stoi(info.second);
-          if (m_players[m_selected_player_id].first == "Spotify")
-            length /= 1000000;
-          m_song_length = Helper::get_instance().format_time(length);
+          length /= 1000000;
+          m_song_length_str = Helper::get_instance().format_time(length);
           notify_observers_song_length_changed();
-          std::cout << "Song length: " << m_song_length << std::endl;
+          std::cout << "Song length: " << m_song_length_str << std::endl;
         } else if (info.first == "xesam:artist") {
           m_song_author = info.second;
           notify_observers_song_author_changed();
@@ -1562,6 +1593,11 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
   }
 }
 
+void Player::on_seeked(sdbus::Signal &signal) {
+  m_song_pos = get_position();
+  notify_observers_song_position_changed();
+}
+
 void Player::add_observer(PlayerObserver *observer) {
   m_observers.push_back(observer);
 }
@@ -1586,10 +1622,10 @@ void Player::set_song_author(const std::string &new_song_author) {
   notify_observers_song_author_changed();
 }
 
-std::string Player::get_song_length_str() const { return m_song_length; }
+std::string Player::get_song_length_str() const { return m_song_length_str; }
 
 void Player::set_song_length(const std::string &new_song_length) {
-  m_song_length = new_song_length;
+  m_song_length_str = new_song_length;
   notify_observers_song_length_changed();
 }
 
@@ -1598,11 +1634,10 @@ void Player::get_song_data() {
   for (auto &info : metadata) {
     if (info.first == "mpris:length") {
       int64_t length = stoi(info.second);
-      if (m_players[m_selected_player_id].first == "Spotify")
-        length /= 1000000;
-      m_song_length = Helper::get_instance().format_time(length);
+      length /= 1000000;
+      m_song_length_str = Helper::get_instance().format_time(length);
       notify_observers_song_length_changed();
-      std::cout << "Song length: " << m_song_length << std::endl;
+      std::cout << "Song length: " << m_song_length_str << std::endl;
     } else if (info.first == "xesam:artist") {
       m_song_author = info.second;
       notify_observers_song_author_changed();
@@ -1617,8 +1652,7 @@ void Player::get_song_data() {
   notify_observers_is_playing_changed();
   m_song_volume = get_volume();
   notify_observers_song_volume_changed();
-  m_song_pos = get_position_str();
-
+  m_song_pos = get_position();
   notify_observers_song_position_changed();
 }
 
@@ -1636,7 +1670,7 @@ void Player::notify_observers_song_author_changed() {
 
 void Player::notify_observers_song_length_changed() {
   for (auto observer : m_observers) {
-    observer->on_song_length_changed(m_song_length);
+    observer->on_song_length_changed(m_song_length_str);
   }
 }
 
