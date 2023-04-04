@@ -29,18 +29,19 @@
 class PlayerWindow : public Gtk::ApplicationWindow, public PlayerObserver {
 public:
   PlayerWindow();
+  PlayerWindow(int argc, char *argv[]);
   virtual ~PlayerWindow() {
     // Stop the position thread
     stop_position_thread();
   }
-  void on_song_name_changed(const std::string &new_song) override {
+  void on_song_title_changed(const std::string &new_song) override {
     std::cout << "New song name PlayerWindow: " << new_song << std::endl;
-    m_song_name_label.set_label(new_song);
+    m_song_title_label.set_label(new_song);
   }
-  void on_song_author_changed(const std::string &new_song_author) override {
+  void on_song_artist_changed(const std::string &new_song_author) override {
     std::cout << "New song author PlayerWindow: " << new_song_author
               << std::endl;
-    m_song_author_label.set_label(new_song_author);
+    m_song_artist_label.set_label(new_song_author);
   }
   void on_song_length_changed(const std::string &new_song_length) override {
     std::cout << "New song length PlayerWindow: " << new_song_length
@@ -59,14 +60,15 @@ public:
   void on_is_playing_changed(const bool &new_is_playing) override {
     std::cout << "New song isplaying PlayerWindow: " << new_is_playing
               << std::endl;
-    std::lock_guard<std::mutex> lock(m_mutex);
+    // m_mutex.unlock();
     if (new_is_playing) {
       // Resume the position thread
       resume_position_thread();
       m_playpause_button.set_icon_name("media-pause");
     } else {
-      // Pause the position thread
-      pause_position_thread();
+
+      // Stop the position thread
+      stop_position_thread();
       m_playpause_button.set_icon_name("media-play");
     }
   }
@@ -99,12 +101,12 @@ protected:
   Gtk::Box m_control_buttons_box, m_volume_and_player_box;
   Gtk::Button m_playpause_button, m_prev_button, m_next_button,
       m_shuffle_button, m_player_choose_button, m_device_choose_button;
-  Gtk::Label m_song_name_label, m_song_author_label, m_current_pos_label,
+  Gtk::Label m_song_title_label, m_song_artist_label, m_current_pos_label,
       m_song_length_label;
   Gtk::Scale m_progress_bar_song_scale;
   VolumeButton m_volume_bar_scale_button;
   Gtk::Popover m_player_choose_popover, m_device_choose_popover;
-  Gtk::ListBox m_song_name_list;
+  Gtk::ListBox m_song_title_list;
   std::atomic_bool stop_flag{false}; // Flag to signal thread to stop
   std::mutex m_mutex;                // Mutex to protect shared resources
   std::thread m_position_thread;     // Thread for updating position

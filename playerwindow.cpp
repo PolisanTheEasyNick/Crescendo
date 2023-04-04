@@ -1,6 +1,7 @@
 #include "playerwindow.h"
 
-PlayerWindow::PlayerWindow() {
+PlayerWindow::PlayerWindow() : m_player() {
+  m_player.add_observer(this);
   // setup current choosed player
   if (m_player.get_shuffle()) {
     m_shuffle_button.get_style_context()->add_class("shuffle-enabled");
@@ -82,31 +83,42 @@ PlayerWindow::PlayerWindow() {
           return;
         double position = m_progress_bar_song_scale.get_value();
         uint64_t song_length = m_player.get_song_length();
-        m_lock_pos_changing = true;
-        m_player.set_position(position * song_length * 1000000);
-        m_lock_pos_changing = false;
-        m_wait = false;
+        if (m_player.get_current_player_name() == "Local") {
+          m_lock_pos_changing = true;
+          m_current_pos_label.set_label(
+              Helper::get_instance().format_time(position * song_length));
+          m_player.set_position(position * song_length);
+          m_lock_pos_changing = false;
+          m_wait = false;
+        } else {
+          m_lock_pos_changing = true;
+          m_current_pos_label.set_label(
+              Helper::get_instance().format_time(position * song_length));
+          m_player.set_position(position * song_length * 1000000);
+          m_lock_pos_changing = false;
+          m_wait = false;
+        }
       });
     }
   }
-  m_song_name_label.set_label("song");
-  m_song_name_label.set_halign(Gtk::Align::START);
-  m_song_name_label.set_valign(Gtk::Align::CENTER);
-  m_song_name_label.set_ellipsize(Pango::EllipsizeMode::END);
-  m_song_author_label.set_label("author");
-  m_song_author_label.set_halign(Gtk::Align::START);
-  m_song_author_label.set_valign(Gtk::Align::CENTER);
-  m_song_name_label.set_ellipsize(Pango::EllipsizeMode::END);
-  m_song_name_list.append(m_song_name_label);
-  m_song_name_list.append(m_song_author_label);
-  m_song_name_list.set_activate_on_single_click(false);
-  m_song_name_list.set_selection_mode(Gtk::SelectionMode::NONE);
-  m_song_name_label.set_can_target(false);
-  m_song_author_label.set_can_target(false);
-  m_song_name_list.set_can_target(false);
-  m_song_name_label.set_focusable(false);
-  m_song_author_label.set_focusable(false);
-  m_song_name_list.set_can_focus(false);
+  m_song_title_label.set_label("song");
+  m_song_title_label.set_halign(Gtk::Align::START);
+  m_song_title_label.set_valign(Gtk::Align::CENTER);
+  m_song_title_label.set_ellipsize(Pango::EllipsizeMode::END);
+  m_song_artist_label.set_label("author");
+  m_song_artist_label.set_halign(Gtk::Align::START);
+  m_song_artist_label.set_valign(Gtk::Align::CENTER);
+  m_song_title_label.set_ellipsize(Pango::EllipsizeMode::END);
+  m_song_title_list.append(m_song_title_label);
+  m_song_title_list.append(m_song_artist_label);
+  m_song_title_list.set_activate_on_single_click(false);
+  m_song_title_list.set_selection_mode(Gtk::SelectionMode::NONE);
+  m_song_title_label.set_can_target(false);
+  m_song_artist_label.set_can_target(false);
+  m_song_title_list.set_can_target(false);
+  m_song_title_label.set_focusable(false);
+  m_song_artist_label.set_focusable(false);
+  m_song_title_list.set_can_focus(false);
 
   m_current_pos_label.set_label("0:00");
   m_current_pos_label.set_halign(Gtk::Align::START);
@@ -119,7 +131,7 @@ PlayerWindow::PlayerWindow() {
   m_progress_bar_song_scale.set_margin_start(40);
   m_progress_bar_song_scale.set_margin_end(40);
 
-  m_main_grid.attach(m_song_name_list, 0, 1);
+  m_main_grid.attach(m_song_title_list, 0, 1);
   m_playpause_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_playpause_clicked));
   m_prev_button.signal_clicked().connect(
@@ -180,8 +192,17 @@ PlayerWindow::PlayerWindow() {
   m_device_choose_button.set_tooltip_text(
       "You must install pulseaudio library for this button");
 #endif
-  m_player.start_listening_signals();
-  m_player.add_observer(this);
+
+  if (m_player.get_current_player_name() != "Local") {
+#ifdef HAVE_DBUS
+    m_player.start_listening_signals();
+#endif
+  } else {
+#ifdef SUPPORT_AUDIO_OUTPUT
+    m_player.open_audio("/home/ob3r0n/Disk_D/msui/arta.mp3");
+#endif
+  }
+
   m_player.get_song_data();
 }
 
@@ -261,7 +282,11 @@ void PlayerWindow::on_player_choosed(unsigned short player_index) {
   }
 
   m_player.get_song_data();
-  m_player.start_listening_signals();
+  if (m_player.get_current_player_name() != "Local") {
+#ifdef HAVE_DBUS
+    m_player.start_listening_signals();
+#endif
+  }
 }
 
 void PlayerWindow::on_device_choose_clicked() {
@@ -363,17 +388,22 @@ void PlayerWindow::check_buttons_features() {
 
 void PlayerWindow::update_position_thread() {
   std::cout << "Started tracking position" << std::endl;
+  m_mutex.lock();
   while (!stop_flag) {
     {
       if (m_wait) {
         continue;
       }
-      std::lock_guard<std::mutex> lock(m_mutex);
-      // Access shared resources here
+
+      //  Access shared resources here
       if (!m_player.get_playback_status()) {
-        std::cout << "Current playback status: "
-                  << m_player.get_playback_status() << std::endl;
+        bool status = m_player.get_playback_status();
+        std::cout << "Current playback status: " << status << std::endl;
         std::cout << "Breaking" << std::endl;
+        m_progress_bar_song_scale.set_value(0.0);
+        m_progress_bar_song_scale.queue_draw();
+        m_current_pos_label.set_label("0:00");
+        m_playpause_button.set_icon_name("media-play");
         break;
       }
       double current_pos = m_player.get_position();
@@ -387,17 +417,15 @@ void PlayerWindow::update_position_thread() {
       m_main_grid.queue_draw();
       m_lock_pos_changing = false;
     }
+    m_mutex.unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    m_mutex.lock();
   }
+  m_mutex.unlock();
   std::cout << "Thread stopped" << std::endl;
 }
 
-void PlayerWindow::pause_position_thread() {
-  stop_flag = true;
-  if (m_position_thread.joinable()) {
-    m_position_thread.join();
-  }
-}
+void PlayerWindow::pause_position_thread() { m_wait = true; }
 
 void PlayerWindow::resume_position_thread() {
   if (!m_position_thread.joinable()) {

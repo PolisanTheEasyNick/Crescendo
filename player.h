@@ -7,16 +7,33 @@
 #include <iomanip>
 #include <iostream>
 #include <list>
-#include <pulse/proplist.h>
-#include <pulse/pulseaudio.h>
-#include <sdbus-c++/sdbus-c++.h>
 #include <sstream>
 #include <vector>
 
+#ifdef HAVE_PULSEAUDIO
+#include <pulse/proplist.h>
+#include <pulse/pulseaudio.h>
+#endif
+
+#ifdef SUPPORT_AUDIO_OUTPUT
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
+#include <mutex>
+#include <sndfile.h>
+#include <taglib/fileref.h>
+#include <taglib/tag.h>
+#include <taglib/tpropertymap.h>
+#include <unistd.h>
+#endif
+
+#ifdef HAVE_DBUS
+#include <sdbus-c++/sdbus-c++.h>
+#endif
+
 class PlayerObserver {
 public:
-  virtual void on_song_name_changed(const std::string &new_song_name) = 0;
-  virtual void on_song_author_changed(const std::string &new_song_author) = 0;
+  virtual void on_song_title_changed(const std::string &new_song_name) = 0;
+  virtual void on_song_artist_changed(const std::string &new_song_author) = 0;
   virtual void on_song_length_changed(const std::string &new_song_length) = 0;
   virtual void on_is_shuffle_changed(const bool &new_is_shuffle) = 0;
   virtual void on_is_playing_changed(const bool &new_is_playing) = 0;
@@ -31,8 +48,10 @@ private:
   std::vector<std::pair<std::string, unsigned short>>
       m_devices; // Name: pulseaudio sink index
   std::list<PlayerObserver *> m_observers;
+#ifdef HAVE_DBUS
   std::unique_ptr<sdbus::IConnection> m_dbus_conn;
   std::unique_ptr<sdbus::IProxy> m_proxy_signal;
+#endif
   unsigned int m_selected_player_id = -1;
 
   bool m_play_pause_method = false;
@@ -47,10 +66,13 @@ private:
   bool m_is_playback_status_prop = false;
   bool m_is_metadata_prop = false;
 
-  std::string m_song_name, m_song_author, m_song_length_str;
+  std::string m_song_title, m_song_artist, m_song_length_str;
   uint64_t m_song_pos, m_song_length;
   bool m_is_shuffle, m_is_playing;
   double m_song_volume;
+#ifdef SUPPORT_AUDIO_OUTPUT
+  Mix_Music *m_music = nullptr;
+#endif
 
 public:
   Player();
@@ -91,12 +113,18 @@ public:
   bool get_is_playback_status_prop() const;
   bool get_is_metadata_prop() const;
   unsigned int get_count_of_players() const;
+  bool get_is_playing() const;
+  void set_is_playing(bool new_is_playing);
 
+#ifdef HAVE_DBUS
+  void stop_listening_signals();
   void start_listening_signals();
   void on_properties_changed(sdbus::Signal &signal);
   void on_seeked(sdbus::Signal &signal);
+#endif
   void add_observer(PlayerObserver *observer);
   void remove_observer(PlayerObserver *observer);
+
   std::string get_song_name() const;
   void set_song_name(const std::string &new_song_name);
   std::string get_song_author() const;
@@ -105,13 +133,19 @@ public:
   void set_song_length(const std::string &new_song_length);
   void get_song_data();
 
-  void notify_observers_song_name_changed();
-  void notify_observers_song_author_changed();
+  void notify_observers_song_title_changed();
+  void notify_observers_song_artist_changed();
   void notify_observers_song_length_changed();
   void notify_observers_is_shuffle_changed();
   void notify_observers_is_playing_changed();
   void notify_observers_song_volume_changed();
   void notify_observers_song_position_changed();
-};
 
+#ifdef SUPPORT_AUDIO_OUTPUT
+  void open_audio(const std::string &filename);
+  void play_audio();
+  void stop_audio();
+  void pause_audio();
+#endif
+};
 #endif // PLAYER_H
