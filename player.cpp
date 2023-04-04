@@ -4,27 +4,63 @@ inline const char *const bool_to_string(bool b) { return b ? "true" : "false"; }
 
 Player::Player() {
 
-  std::cout << "Trying to create " << std::endl;
+  m_song_title = "";
+  m_song_artist = "";
+  m_song_length_str = "";
+  m_song_pos = 0;
+  m_song_length = 0;
+  m_is_shuffle = false;
+  m_is_playing = false;
+  m_song_volume = 0;
+#ifdef HAVE_DBUS
   m_dbus_conn = sdbus::createSessionBusConnection();
   if (m_dbus_conn)
     std::cout << "Connected to D-Bus as \"" << m_dbus_conn->getUniqueName()
               << "\"." << std::endl;
-
+#endif
   get_players();
   if (m_players.size() != 0) {
     if (select_player(0)) {
-      std::cout << "Selected player: " << m_players[m_selected_player_id].first
-                << " at " << m_players[m_selected_player_id].second
-                << std::endl;
+      if (m_players[m_selected_player_id].first != "Local") {
+        std::cout << "Selected local player." << std::endl;
+      } else {
+        std::cout << "Selected player: "
+                  << m_players[m_selected_player_id].first << " at "
+                  << m_players[m_selected_player_id].second << std::endl;
+      }
     };
     get_song_data();
   }
+
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+    std::cerr << "SDL initialization failed: " << SDL_GetError() << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if (Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 4096) < 0) {
+    std::cerr << "Mix_OpenAudio failed: " << Mix_GetError() << std::endl;
+    exit(EXIT_FAILURE);
+  }
+#endif
 }
 
-Player::~Player() { m_proxy_signal.reset(); }
+Player::~Player() {
+#ifdef HAVE_DBUS
+  m_proxy_signal.reset();
+#endif
+#ifdef SUPPORT_AUDIO_OUTPUT
+  Mix_FreeMusic(m_music);
+  Mix_CloseAudio();
+  SDL_Quit();
+#endif
+}
 
 std::vector<std::pair<std::string, std::string>> Player::get_players() {
   m_players.clear();
+#ifdef SUPPORT_AUDIO_OUTPUT
+  m_players.push_back(std::make_pair("Local", ""));
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't get players. Aborting."
               << std::endl;
@@ -78,6 +114,7 @@ std::vector<std::pair<std::string, std::string>> Player::get_players() {
     std::cout << "No media players found." << std::endl;
     return {};
   }
+#endif
   return m_players;
 }
 
@@ -94,17 +131,42 @@ void Player::print_players_names() {
 }
 
 bool Player::select_player(unsigned int new_id) {
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't get players. Aborting."
               << std::endl;
     return false;
   }
+#endif
   get_players();
   if (new_id < 0 || new_id > m_players.size()) {
     std::cout << "This player does not exists!" << std::endl;
     return false;
   }
+
   m_selected_player_id = new_id;
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    m_play_pause_method = true;
+    m_pause_method = true;
+    m_play_method = true;
+    m_next_method = true;
+    m_previous_method = true;
+    m_setpos_method = true;
+    m_is_shuffle_prop = true;
+    m_is_pos_prop = true;
+    m_is_volume_prop = true;
+    m_is_playback_status_prop = true;
+    m_is_metadata_prop = true;
+#ifdef HAVE_DBUS
+    stop_listening_signals();
+#endif
+    return true;
+  } else {
+    pause_audio();
+  }
+#endif
+#ifdef HAVE_DBUS
   std::string xml_introspect;
   try {
     auto proxy = sdbus::createProxy(*m_dbus_conn.get(),
@@ -289,11 +351,32 @@ bool Player::select_player(unsigned int new_id) {
     m_is_metadata_prop = false;
   }
   start_listening_signals();
-
+#endif
   return true;
 }
 
 bool Player::send_play_pause() {
+  if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
+    std::cout << "Player not selected, can't continue." << std::endl;
+    return false;
+  }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    if (Mix_PlayingMusic() && Mix_PausedMusic()) {
+      play_audio();
+      m_is_playing = true;
+    } else if (Mix_PlayingMusic() && !Mix_PausedMusic()) {
+      pause_audio();
+      m_is_playing = false;
+    } else {
+      play_audio();
+      m_is_playing = true;
+    }
+    notify_observers_is_playing_changed();
+    return true;
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't send PlayPause. Aborting."
               << std::endl;
@@ -302,10 +385,6 @@ bool Player::send_play_pause() {
   if (!m_play_pause_method) {
     std::cerr << "This player does not compatible with PlayPause method!"
               << std::endl;
-    return false;
-  }
-  if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
-    std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
   try {
@@ -322,6 +401,8 @@ bool Player::send_play_pause() {
               << std::endl;
     return false;
   }
+#endif
+  return false;
 }
 
 bool Player::send_pause() {
@@ -329,6 +410,13 @@ bool Player::send_pause() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    pause_audio();
+    return true;
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't send Pause. Aborting."
               << std::endl;
@@ -353,6 +441,8 @@ bool Player::send_pause() {
               << std::endl;
     return false;
   }
+#endif
+  return false;
 }
 
 bool Player::send_play() {
@@ -360,6 +450,13 @@ bool Player::send_play() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    play_audio();
+    return true;
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't send Play. Aborting."
               << std::endl;
@@ -384,6 +481,8 @@ bool Player::send_play() {
               << std::endl;
     return false;
   }
+#endif
+  return false;
 }
 
 bool Player::send_next() {
@@ -391,6 +490,13 @@ bool Player::send_next() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    std::cout << "Send_next not implemented yet" << std::endl;
+    return false;
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't send Next. Aborting."
               << std::endl;
@@ -415,6 +521,8 @@ bool Player::send_next() {
               << std::endl;
     return false;
   }
+#endif
+  return false;
 }
 
 bool Player::send_previous() {
@@ -422,6 +530,13 @@ bool Player::send_previous() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    std::cout << "send_previous not implemented yet" << std::endl;
+    return false;
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't send Previous. Aborting."
               << std::endl;
@@ -446,13 +561,21 @@ bool Player::send_previous() {
               << std::endl;
     return false;
   }
+#endif
+  return false;
 }
 
 bool Player::get_shuffle() {
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    return m_is_shuffle;
+  }
+#endif
   if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't get Shuffle. Aborting."
               << std::endl;
@@ -484,6 +607,8 @@ bool Player::get_shuffle() {
               << std::endl;
     return false;
   }
+#endif
+  return false;
 }
 
 bool Player::set_shuffle(bool isShuffle) {
@@ -491,6 +616,14 @@ bool Player::set_shuffle(bool isShuffle) {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    m_is_shuffle = isShuffle;
+    notify_observers_is_shuffle_changed();
+    return true;
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't set Shuffle. Aborting."
               << std::endl;
@@ -518,7 +651,8 @@ bool Player::set_shuffle(bool isShuffle) {
               << std::endl;
     return false;
   }
-  return true;
+#endif
+  return false;
 }
 
 int64_t Player::get_position() {
@@ -526,6 +660,12 @@ int64_t Player::get_position() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return 0;
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    return Mix_GetMusicPosition(m_music);
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't set Position. Aborting."
               << std::endl;
@@ -554,6 +694,8 @@ int64_t Player::get_position() {
               << std::endl;
     return 0;
   }
+#endif
+  return 0;
 }
 
 std::string Player::get_position_str() {
@@ -565,6 +707,13 @@ bool Player::set_position(int64_t pos) {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    int res = Mix_SetMusicPosition(pos);
+    return res == 0;
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't set Position. Aborting."
               << std::endl;
@@ -596,17 +745,29 @@ bool Player::set_position(int64_t pos) {
               << std::endl;
     return false;
   }
+#endif
   return false;
 }
 
 uint64_t Player::get_song_length() {
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    return m_song_length;
+  }
+#endif
   auto metadata = get_metadata();
   for (auto &info : metadata) {
     if (info.first == "mpris:length") {
       int64_t length = stoi(info.second);
-      return length / 1000000;
+#ifdef SUPPORT_AUDIO_OUTPUT
+      if (m_players[m_selected_player_id].first != "Local") {
+        length /= 1000000;
+      }
+#endif
+      return length;
     }
   }
+
   return 0;
 }
 
@@ -615,6 +776,12 @@ double Player::get_volume() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return 0;
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    return Mix_GetMusicVolume(m_music) / 128;
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't set Volume. Aborting."
               << std::endl;
@@ -642,6 +809,8 @@ double Player::get_volume() {
               << std::endl;
     return 0;
   }
+#endif
+  return 0;
 }
 
 bool Player::set_volume(double volume) {
@@ -649,11 +818,19 @@ bool Player::set_volume(double volume) {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    int newVolume = 128 * volume;
+    Mix_VolumeMusic(newVolume);
+    return true;
+  }
+#endif
   if (!m_is_volume_prop) {
     std::cerr << "This player does not compatible with Volume property!"
               << std::endl;
     return false;
   }
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't set Volume. Aborting."
               << std::endl;
@@ -680,6 +857,7 @@ bool Player::set_volume(double volume) {
               << std::endl;
     return false;
   }
+#endif
   return true;
 }
 
@@ -688,6 +866,12 @@ bool Player::get_playback_status() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    return Mix_PlayingMusic() && !Mix_PausedMusic();
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't get PlayBack Status. Aborting."
               << std::endl;
@@ -716,6 +900,8 @@ bool Player::get_playback_status() {
               << std::endl;
     return false;
   }
+#endif
+  return false;
 }
 
 std::string Player::get_current_player_name() {
@@ -723,6 +909,12 @@ std::string Player::get_current_player_name() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return "";
   }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    return "Local";
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't get Identity. Aborting."
               << std::endl;
@@ -744,6 +936,8 @@ std::string Player::get_current_player_name() {
               << std::endl;
     return "";
   }
+#endif
+  return "";
 }
 
 unsigned short Player::get_current_device_sink_index() {
@@ -759,25 +953,36 @@ unsigned short Player::get_current_device_sink_index() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
+  static uint32_t proc_id = 0;
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    proc_id = getpid();
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout
         << "Not connected to DBus, can't get player's process id. Aborting."
         << std::endl;
     return -1;
   }
-  static uint32_t proc_id = 0;
-  try {
-    auto proxy = sdbus::createProxy(*m_dbus_conn.get(), "org.freedesktop.DBus",
-                                    "/org/freedesktop/DBus");
-    proxy->callMethod("GetConnectionUnixProcessID")
-        .onInterface("org.freedesktop.DBus")
-        .withArguments(m_players[m_selected_player_id].second)
-        .storeResultsTo(proc_id);
-  } catch (const sdbus::Error &e) {
-    std::cout << "Error while getting current device process id: " << e.what()
-              << std::endl;
-    return -1;
+  if (m_players[m_selected_player_id].first != "Local") {
+    try {
+      auto proxy = sdbus::createProxy(
+          *m_dbus_conn.get(), "org.freedesktop.DBus", "/org/freedesktop/DBus");
+      proxy->callMethod("GetConnectionUnixProcessID")
+          .onInterface("org.freedesktop.DBus")
+          .withArguments(m_players[m_selected_player_id].second)
+          .storeResultsTo(proc_id);
+    } catch (const sdbus::Error &e) {
+      std::cout << "Error while getting current device process id: " << e.what()
+                << std::endl;
+      return -1;
+    }
   }
+#endif
+  static int player_sink_id = -1;
+#ifdef HAVE_PULSEAUDIO
   // Create a main loop object
   pa_mainloop *mainloop = pa_mainloop_new();
 
@@ -798,7 +1003,7 @@ unsigned short Player::get_current_device_sink_index() {
   while (pa_context_get_state(context) != PA_CONTEXT_READY) {
     pa_mainloop_iterate(mainloop, true, NULL);
   }
-  static int player_sink_id = -1;
+
   // Get the list of sink devices
   static std::string player_name = m_players[m_selected_player_id].first;
   pa_operation *operation = pa_context_get_sink_input_info_list(
@@ -852,7 +1057,7 @@ unsigned short Player::get_current_device_sink_index() {
   while (pa_operation_get_state(operation) == PA_OPERATION_RUNNING) {
     pa_mainloop_iterate(mainloop, true, NULL);
   }
-
+#endif
   if (player_sink_id == -1) {
     std::cout << "Not found player sink. Can't continue." << std::endl;
     return -1;
@@ -866,6 +1071,19 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
     return {};
   }
   std::vector<std::pair<std::string, std::string>> metadata;
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (get_current_player_name() == "Local") {
+    std::cout << "Music filename: " << Mix_GetMusicTitle(m_music) << std::endl;
+    metadata.push_back(
+        std::make_pair("xesam:title", Mix_GetMusicTitle(m_music)));
+    metadata.push_back(
+        std::make_pair("xesam:artist", Mix_GetMusicArtistTag(m_music)));
+    metadata.push_back(std::make_pair(
+        "mpris:length", std::to_string(Mix_MusicDuration(m_music))));
+    return metadata;
+  }
+#endif
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't get metadata. Aborting."
               << std::endl;
@@ -1076,6 +1294,7 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
     std::cout << "Error while getting metadata: " << e.what() << std::endl;
     return {};
   }
+#endif
   return metadata;
 }
 
@@ -1090,6 +1309,7 @@ Player::get_output_devices() {
   return {};
 #endif
   m_devices.clear();
+#ifdef HAVE_PULSEAUDIO
   // Create a main loop and a new PulseAudio context
   pa_mainloop *mainloop = pa_mainloop_new();
   pa_context *context =
@@ -1141,7 +1361,7 @@ Player::get_output_devices() {
   pa_context_disconnect(context);
   pa_context_unref(context);
   pa_mainloop_free(mainloop);
-
+#endif
   return m_devices;
 }
 
@@ -1156,31 +1376,41 @@ void Player::set_output_device(unsigned short output_sink_index) {
     std::cout << "Player not selected, can't continue." << std::endl;
     return;
   }
+#ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout
         << "Not connected to DBus, can't get player's process id. Aborting."
         << std::endl;
     return;
   }
+#endif
   static uint32_t proc_id = 0;
-  try {
-    auto proxy = sdbus::createProxy(*m_dbus_conn.get(), "org.freedesktop.DBus",
-                                    "/org/freedesktop/DBus");
-    proxy->callMethod("GetConnectionUnixProcessID")
-        .onInterface("org.freedesktop.DBus")
-        .withArguments(m_players[m_selected_player_id].second)
-        .storeResultsTo(proc_id);
-  } catch (const sdbus::Error &e) {
-    std::cout << "Error while getting current device process id: " << e.what()
-              << std::endl;
-    return;
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (get_current_player_name() == "Local")
+    proc_id = getpid();
+#endif
+#ifdef HAVE_DBUS
+  if (get_current_player_name() != "Local") {
+    try {
+      auto proxy = sdbus::createProxy(
+          *m_dbus_conn.get(), "org.freedesktop.DBus", "/org/freedesktop/DBus");
+      proxy->callMethod("GetConnectionUnixProcessID")
+          .onInterface("org.freedesktop.DBus")
+          .withArguments(m_players[m_selected_player_id].second)
+          .storeResultsTo(proc_id);
+    } catch (const sdbus::Error &e) {
+      std::cout << "Error while getting current device process id: " << e.what()
+                << std::endl;
+      return;
+    }
   }
-
+#endif
   if (proc_id == 0) {
     std::cout << "Error while getting player's process id, can't continue."
               << std::endl;
     return;
   }
+#ifdef HAVE_PULSEAUDIO
   // Create a main loop object
   pa_mainloop *mainloop = pa_mainloop_new();
 
@@ -1284,6 +1514,7 @@ void Player::set_output_device(unsigned short output_sink_index) {
   pa_context_disconnect(context);
   pa_context_unref(context);
   pa_mainloop_free(mainloop);
+#endif
 }
 
 bool Player::get_play_pause_method() const { return m_play_pause_method; }
@@ -1312,8 +1543,18 @@ bool Player::get_is_metadata_prop() const { return m_is_metadata_prop; }
 
 unsigned int Player::get_count_of_players() const { return m_players.size(); }
 
+bool Player::get_is_playing() const { return m_is_playing; }
+
+void Player::set_is_playing(bool new_is_playing) {
+  m_is_playing = new_is_playing;
+  notify_observers_is_playing_changed();
+}
+
+#ifdef HAVE_DBUS
+void Player::stop_listening_signals() { m_proxy_signal.reset(); }
+
 void Player::start_listening_signals() {
-  m_proxy_signal.reset();
+  stop_listening_signals();
   m_proxy_signal = sdbus::createProxy(*m_dbus_conn.get(),
                                       m_players[m_selected_player_id].second,
                                       "/org/mpris/MediaPlayer2");
@@ -1566,11 +1807,11 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
           notify_observers_song_length_changed();
           std::cout << "Song length: " << m_song_length_str << std::endl;
         } else if (info.first == "xesam:artist") {
-          m_song_author = info.second;
-          notify_observers_song_author_changed();
+          m_song_artist = info.second;
+          notify_observers_song_artist_changed();
         } else if (info.first == "xesam:title") {
-          m_song_name = info.second;
-          notify_observers_song_name_changed();
+          m_song_title = info.second;
+          notify_observers_song_title_changed();
         }
       }
       return;
@@ -1598,6 +1839,8 @@ void Player::on_seeked(sdbus::Signal &signal) {
   notify_observers_song_position_changed();
 }
 
+#endif
+
 void Player::add_observer(PlayerObserver *observer) {
   m_observers.push_back(observer);
 }
@@ -1608,18 +1851,18 @@ void Player::remove_observer(PlayerObserver *observer) {
       m_observers.end());
 }
 
-std::string Player::get_song_name() const { return m_song_name; }
+std::string Player::get_song_name() const { return m_song_title; }
 
 void Player::set_song_name(const std::string &new_song_name) {
-  m_song_name = new_song_name;
-  notify_observers_song_name_changed();
+  m_song_title = new_song_name;
+  notify_observers_song_title_changed();
 }
 
-std::string Player::get_song_author() const { return m_song_author; }
+std::string Player::get_song_author() const { return m_song_artist; }
 
 void Player::set_song_author(const std::string &new_song_author) {
-  m_song_author = new_song_author;
-  notify_observers_song_author_changed();
+  m_song_artist = new_song_author;
+  notify_observers_song_artist_changed();
 }
 
 std::string Player::get_song_length_str() const { return m_song_length_str; }
@@ -1633,17 +1876,20 @@ void Player::get_song_data() {
   auto metadata = get_metadata();
   for (auto &info : metadata) {
     if (info.first == "mpris:length") {
+      std::cout << "Got metadata length: " << info.second << std::endl;
       int64_t length = stoi(info.second);
-      length /= 1000000;
+      std::cout << "Stoi: " << length << std::endl;
+      if (get_current_player_name() != "Local")
+        length /= 1000000;
       m_song_length_str = Helper::get_instance().format_time(length);
       notify_observers_song_length_changed();
       std::cout << "Song length: " << m_song_length_str << std::endl;
     } else if (info.first == "xesam:artist") {
-      m_song_author = info.second;
-      notify_observers_song_author_changed();
+      m_song_artist = info.second;
+      notify_observers_song_artist_changed();
     } else if (info.first == "xesam:title") {
-      m_song_name = info.second;
-      notify_observers_song_name_changed();
+      m_song_title = info.second;
+      notify_observers_song_title_changed();
     }
   }
   m_is_shuffle = get_shuffle();
@@ -1656,15 +1902,15 @@ void Player::get_song_data() {
   notify_observers_song_position_changed();
 }
 
-void Player::notify_observers_song_name_changed() {
+void Player::notify_observers_song_title_changed() {
   for (auto observer : m_observers) {
-    observer->on_song_name_changed(m_song_name);
+    observer->on_song_title_changed(m_song_title);
   }
 }
 
-void Player::notify_observers_song_author_changed() {
+void Player::notify_observers_song_artist_changed() {
   for (auto observer : m_observers) {
-    observer->on_song_author_changed(m_song_author);
+    observer->on_song_artist_changed(m_song_artist);
   }
 }
 
@@ -1697,3 +1943,85 @@ void Player::notify_observers_song_position_changed() {
     observer->on_song_position_changed(m_song_pos);
   }
 }
+
+#ifdef SUPPORT_AUDIO_OUTPUT
+
+void Player::open_audio(const std::string &filename) {
+  Mix_FreeMusic(m_music);
+  const char *path = "/home/ob3r0n/Disk_D/msui/arta.mp3";
+  SF_INFO info = {0};
+  SNDFILE *sndfile = sf_open(path, SFM_READ, &info);
+  if (!sndfile) {
+    std::cout << "Error opening file " << path << ": " << sf_strerror(sndfile)
+              << std::endl;
+    return;
+  }
+
+  TagLib::FileRef f(filename.c_str());
+  if (f.isNull()) {
+    std::cout << "Cant open file" << std::endl;
+    return;
+  }
+
+  std::cout << "Audio file: " << path << std::endl;
+  std::cout << "Sample rate: " << info.samplerate << std::endl;
+  std::cout << "Channels: " << info.channels << std::endl;
+
+  sf_close(sndfile);
+  int audio_rate = info.samplerate;
+  Uint16 audio_format = AUDIO_S16SYS;
+  int audio_channels = info.channels;
+  int audio_buffers = 4096;
+
+  if (Mix_OpenAudio(audio_rate, audio_format, audio_channels, audio_buffers) <
+      0) {
+    std::cout << "Failed to open audio: " << Mix_GetError() << std::endl;
+    return;
+  }
+  m_music = Mix_LoadMUS(filename.c_str());
+  if (!m_music) {
+    std::cout << "Mix_LoadMUS failed: " << Mix_GetError() << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  m_song_title = Mix_GetMusicTitle(m_music);
+  m_song_artist = Mix_GetMusicArtistTag(m_music);
+  m_song_length = Mix_MusicDuration(m_music);
+  m_song_length_str = Helper::get_instance().format_time(m_song_length);
+  std::cout << "Title: " << m_song_title << std::endl;
+  notify_observers_song_title_changed();
+  std::cout << "Artist: " << m_song_artist << std::endl;
+  notify_observers_song_artist_changed();
+  std::cout << "Length (seconds): " << m_song_length << std::endl;
+  notify_observers_song_length_changed();
+}
+
+void Player::play_audio() {
+  if (Mix_PausedMusic()) {
+    Mix_ResumeMusic();
+    m_is_playing = true;
+    notify_observers_is_playing_changed();
+    return;
+  }
+  if (Mix_PlayMusic(m_music, 1) == -1) {
+    std::cout << "Mix_PlayMusic failed: " << Mix_GetError() << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  // Start playing the audio
+  Mix_PlayMusic(m_music, 0);
+  m_is_playing = true;
+  notify_observers_is_playing_changed();
+}
+
+void Player::stop_audio() {
+  Mix_HaltMusic();
+  m_is_playing = false;
+  notify_observers_is_playing_changed();
+}
+
+void Player::pause_audio() {
+  Mix_PauseMusic();
+  m_is_playing = false;
+  notify_observers_is_playing_changed();
+}
+
+#endif
