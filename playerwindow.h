@@ -2,6 +2,7 @@
 #define PLAYERWINDOW_H
 
 #include "player.h"
+#include "playlistrow.h"
 #include "volumebutton.h"
 #include <atomic>
 #include <chrono>
@@ -25,6 +26,7 @@
 #include <mutex>
 #include <sigc++/signal.h>
 #include <thread>
+#include <tuple>
 
 class PlayerWindow : public Gtk::ApplicationWindow, public PlayerObserver {
 public:
@@ -92,21 +94,28 @@ public:
     m_lock_pos_changing = false;
   }
 
+  void add_song_to_playlist(std::string filename);
+
 protected:
   Player m_player;
+  std::vector<std::tuple<std::string, std::string, std::string, std::string>>
+      m_playlist; // one tuple is: filename - title - artist - length in string
+                  // (0:00)
   void on_playpause_clicked(), on_prev_clicked(), on_next_clicked(),
       on_shuffle_clicked(), on_player_choose_clicked(),
       on_device_choose_clicked();
   Gtk::Grid m_main_grid;
   Gtk::Box m_control_buttons_box, m_volume_and_player_box;
   Gtk::Button m_playpause_button, m_prev_button, m_next_button,
-      m_shuffle_button, m_player_choose_button, m_device_choose_button;
+      m_shuffle_button, m_player_choose_button, m_device_choose_button,
+      m_add_song_to_playlist_button;
   Gtk::Label m_song_title_label, m_song_artist_label, m_current_pos_label,
       m_song_length_label;
   Gtk::Scale m_progress_bar_song_scale;
   VolumeButton m_volume_bar_scale_button;
   Gtk::Popover m_player_choose_popover, m_device_choose_popover;
-  Gtk::ListBox m_song_title_list;
+  Gtk::ListBox m_song_title_list, m_playlist_listbox;
+  Gtk::ScrolledWindow m_playlist_scrolled_window;
   std::atomic_bool stop_flag{false}; // Flag to signal thread to stop
   std::mutex m_mutex;                // Mutex to protect shared resources
   std::thread m_position_thread;     // Thread for updating position

@@ -1948,22 +1948,15 @@ void Player::notify_observers_song_position_changed() {
 
 void Player::open_audio(const std::string &filename) {
   Mix_FreeMusic(m_music);
-  const char *path = "/home/ob3r0n/Disk_D/msui/arta.mp3";
   SF_INFO info = {0};
-  SNDFILE *sndfile = sf_open(path, SFM_READ, &info);
+  SNDFILE *sndfile = sf_open(filename.c_str(), SFM_READ, &info);
   if (!sndfile) {
-    std::cout << "Error opening file " << path << ": " << sf_strerror(sndfile)
-              << std::endl;
+    std::cout << "Error opening file " << filename.c_str() << ": "
+              << sf_strerror(sndfile) << std::endl;
     return;
   }
 
-  TagLib::FileRef f(filename.c_str());
-  if (f.isNull()) {
-    std::cout << "Cant open file" << std::endl;
-    return;
-  }
-
-  std::cout << "Audio file: " << path << std::endl;
+  std::cout << "Audio file: " << filename.c_str() << std::endl;
   std::cout << "Sample rate: " << info.samplerate << std::endl;
   std::cout << "Channels: " << info.channels << std::endl;
 

@@ -17,7 +17,7 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/icon.svg"
         DESTINATION $ENV{HOME}/.local/share/icons/hicolor/scalable/apps/
         RENAME "org.polisan.crescendo.svg")
 
-add_executable(Crescendo player.h player.cpp helper.h playerwindow.h playerwindow.cpp volumebutton.h volumebutton.cpp main.cpp)
+add_executable(Crescendo player.h player.cpp helper.h playerwindow.h playerwindow.cpp volumebutton.h volumebutton.cpp playlistrow.h playlistrow.cpp main.cpp)
 
 pkg_check_modules(SDBUS sdbus-c++)
 

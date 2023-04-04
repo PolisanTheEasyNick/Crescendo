@@ -28,7 +28,8 @@ PlayerWindow::PlayerWindow() : m_player() {
   // main_grid.set_row_homogeneous(true);
   m_main_grid.set_column_homogeneous(true);
   m_main_grid.set_margin(15);
-
+  m_main_grid.set_valign(Gtk::Align::FILL);
+  m_main_grid.set_vexpand(true);
   m_shuffle_button.set_icon_name("media-playlist-shuffle");
   m_prev_button.set_icon_name("media-skip-backward");
   m_playpause_button.set_icon_name("media-playback-pause");
@@ -36,7 +37,8 @@ PlayerWindow::PlayerWindow() : m_player() {
 
   m_control_buttons_box.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_control_buttons_box.set_halign(Gtk::Align::CENTER);
-  m_control_buttons_box.set_valign(Gtk::Align::CENTER);
+  m_control_buttons_box.set_valign(Gtk::Align::END);
+  // m_control_buttons_box.set_vexpand();
   m_control_buttons_box.set_spacing(5);
   m_control_buttons_box.append(m_shuffle_button);
   m_control_buttons_box.append(m_prev_button);
@@ -55,16 +57,31 @@ PlayerWindow::PlayerWindow() : m_player() {
       });
   m_volume_and_player_box.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_volume_and_player_box.set_halign(Gtk::Align::END);
-  m_volume_and_player_box.set_valign(Gtk::Align::CENTER);
+  m_volume_and_player_box.set_valign(Gtk::Align::END);
+  // m_volume_and_player_box.set_vexpand();
   m_volume_and_player_box.append(m_player_choose_button);
   m_volume_and_player_box.append(m_device_choose_button);
   m_volume_and_player_box.append(m_volume_bar_scale_button);
   m_volume_and_player_box.set_spacing(5);
 
+  m_current_pos_label.set_label("0:00");
+  m_current_pos_label.set_halign(Gtk::Align::START);
+  m_current_pos_label.set_valign(Gtk::Align::CENTER);
+  // m_current_pos_label.set_vexpand();
+
   m_progress_bar_song_scale.set_halign(Gtk::Align::FILL);
   m_progress_bar_song_scale.set_valign(Gtk::Align::END);
+  // m_progress_bar_song_scale.set_vexpand();
   m_progress_bar_song_scale.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_progress_bar_song_scale.set_adjustment(Gtk::Adjustment::create(0.5, 0, 1));
+  m_progress_bar_song_scale.set_margin_start(40);
+  m_progress_bar_song_scale.set_margin_end(40);
+
+  m_song_length_label.set_label("0:00");
+  m_song_length_label.set_halign(Gtk::Align::END);
+  m_song_length_label.set_valign(Gtk::Align::CENTER);
+  // m_song_length_label.set_vexpand();
+
   auto controllers = m_progress_bar_song_scale.observe_controllers();
   GListModel *model = controllers->gobj();
   int n_controllers = g_list_model_get_n_items(model);
@@ -111,6 +128,8 @@ PlayerWindow::PlayerWindow() : m_player() {
   m_song_title_label.set_ellipsize(Pango::EllipsizeMode::END);
   m_song_title_list.append(m_song_title_label);
   m_song_title_list.append(m_song_artist_label);
+  m_song_title_list.set_valign(Gtk::Align::END);
+  // m_song_title_list.set_vexpand();
   m_song_title_list.set_activate_on_single_click(false);
   m_song_title_list.set_selection_mode(Gtk::SelectionMode::NONE);
   m_song_title_label.set_can_target(false);
@@ -120,18 +139,6 @@ PlayerWindow::PlayerWindow() : m_player() {
   m_song_artist_label.set_focusable(false);
   m_song_title_list.set_can_focus(false);
 
-  m_current_pos_label.set_label("0:00");
-  m_current_pos_label.set_halign(Gtk::Align::START);
-  m_current_pos_label.set_valign(Gtk::Align::CENTER);
-
-  m_song_length_label.set_label("0:00");
-  m_song_length_label.set_halign(Gtk::Align::END);
-  m_song_length_label.set_valign(Gtk::Align::CENTER);
-
-  m_progress_bar_song_scale.set_margin_start(40);
-  m_progress_bar_song_scale.set_margin_end(40);
-
-  m_main_grid.attach(m_song_title_list, 0, 1);
   m_playpause_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_playpause_clicked));
   m_prev_button.signal_clicked().connect(
@@ -145,11 +152,12 @@ PlayerWindow::PlayerWindow() : m_player() {
   m_device_choose_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_device_choose_clicked));
 
-  m_main_grid.attach(m_control_buttons_box, 1, 1);
-  m_main_grid.attach(m_volume_and_player_box, 2, 1);
-  m_main_grid.attach(m_current_pos_label, 0, 0);
-  m_main_grid.attach(m_song_length_label, 2, 0);
-  m_main_grid.attach(m_progress_bar_song_scale, 0, 0, 3, 1);
+  m_main_grid.attach(m_current_pos_label, 0, 1);
+  m_main_grid.attach(m_song_length_label, 2, 1);
+  m_main_grid.attach(m_progress_bar_song_scale, 0, 1, 3, 1);
+  m_main_grid.attach(m_control_buttons_box, 1, 2);
+  m_main_grid.attach(m_volume_and_player_box, 2, 2);
+  m_main_grid.attach(m_song_title_list, 0, 2);
 
   // add shuffle css for changing colors if shuffle enabled
   //  Create a CSS provider and load a stylesheet
@@ -180,6 +188,22 @@ PlayerWindow::PlayerWindow() : m_player() {
     // Start the idle handler to update the position
     m_position_thread =
         std::thread(&PlayerWindow::update_position_thread, this);
+  }
+
+  // adding elements for playlist
+  m_add_song_to_playlist_button.set_icon_name("add");
+  m_add_song_to_playlist_button.set_size_request(10, 10);
+  m_add_song_to_playlist_button.set_halign(Gtk::Align::START);
+  m_add_song_to_playlist_button.set_valign(Gtk::Align::START);
+  m_playlist_scrolled_window.set_valign(Gtk::Align::FILL);
+  m_playlist_scrolled_window.set_halign(Gtk::Align::FILL);
+  m_playlist_scrolled_window.set_vexpand();
+  m_playlist_scrolled_window.set_hexpand();
+  m_playlist_scrolled_window.set_child(m_playlist_listbox);
+  m_main_grid.attach(m_add_song_to_playlist_button, 0, 0);
+  m_main_grid.attach(m_playlist_scrolled_window, 1, 0, 2, 1);
+  if (m_player.get_current_player_name() == "Local") {
+    add_song_to_playlist("/home/ob3r0n/Disk_D/msui/arta.mp3");
   }
 
 #ifdef HAVE_PULSEAUDIO
@@ -440,4 +464,22 @@ void PlayerWindow::stop_position_thread() {
   if (m_position_thread.joinable()) {
     m_position_thread.join();
   }
+}
+
+void PlayerWindow::add_song_to_playlist(std::string filename) {
+#ifdef SUPPORT_AUDIO_OUTPUT
+  Mix_Music *music = Mix_LoadMUS(filename.c_str());
+  if (!music) {
+    std::cout << "Mix_LoadMUS failed: " << Mix_GetError() << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  std::string song_title = Mix_GetMusicTitle(music);
+  std::string song_artist = Mix_GetMusicArtistTag(music);
+  std::string song_length =
+      Helper::get_instance().format_time(Mix_MusicDuration(music));
+  m_playlist.push_back(
+      std::make_tuple(filename, song_title, song_artist, song_length));
+  m_playlist_listbox.append(
+      *Gtk::make_managed<PlaylistRow>(song_title, song_artist, song_length));
+#endif
 }
