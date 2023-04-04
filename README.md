@@ -11,9 +11,10 @@ Crescendo is a music player controller that can retrieve information about a pla
 ## Dependencies:
 * C++17
 * gtkmm-4.0
-* sdbus-c++ (https://github.com/Kistler-Group/sdbus-cpp)
-* pugixml
+* pugixml 
 * PulseAudio (optional, you will not be able to change the output sound device for player)
+* [sdbus-c++](https://github.com/Kistler-Group/sdbus-cpp) (optional, without it you will not be able to control another players)
+* SDL2, SDL2_mixer, taglib (optional, you will not be able to use Crescendo as local player for audio files)
 
 ## Installation
 To install Crescendo, follow these steps:
@@ -21,13 +22,13 @@ To install Crescendo, follow these steps:
 ```bash
 $ git clone https://github.com/PolisanTheEasyNick/Crescendo.git
 ```
-2. Install the dependencies required for the project
+2. Install the dependencies required for the project  
 You need to do it specifially for your package manager.  
 For example, for Arch Linux:
 ```bash
-$ sudo pacman -Sy pugixml gtkmm-4.0 dbus pulseaudio
+$ sudo pacman -Sy pugixml gtkmm-4.0 dbus pulseaudio sdl2 sdl2_mixer taglib 
 ```
-Don't forget that PulseAudio package is optional.  
+Don't forget that PulseAudio, SDL2, SDL2_mixer, taglib packages are optional.  
 Also, you need to install sdbus-c++, which is not available in Arch Linux package repository, so you need to refer to https://github.com/Kistler-Group/sdbus-cpp#building-and-installing-the-library  
 But sdbus-c++ is available in Arch User Repository (AUR). You can install sdbus-c++ using your favourite AUR helper or manually:
 ```bash
