@@ -21,15 +21,15 @@ Player::Player() {
   get_players();
   if (m_players.size() != 0) {
     if (select_player(0)) {
-      if (m_players[m_selected_player_id].first != "Local") {
+      if (m_players[m_selected_player_id].first == "Local") {
         std::cout << "Selected local player." << std::endl;
       } else {
         std::cout << "Selected player: "
                   << m_players[m_selected_player_id].first << " at "
                   << m_players[m_selected_player_id].second << std::endl;
+        get_song_data();
       }
     };
-    get_song_data();
   }
 
 #ifdef SUPPORT_AUDIO_OUTPUT

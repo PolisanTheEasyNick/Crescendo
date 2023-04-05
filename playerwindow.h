@@ -6,12 +6,14 @@
 #include "volumebutton.h"
 #include <atomic>
 #include <chrono>
+#include <gio/gfile.h>
 #include <glib.h>
 #include <gtkmm/application.h>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/cssprovider.h>
+#include <gtkmm/filedialog.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/gesturelongpress.h>
 #include <gtkmm/grid.h>

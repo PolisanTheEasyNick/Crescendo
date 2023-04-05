@@ -16,7 +16,6 @@ PlayerWindow::PlayerWindow() : m_player() {
   }
   if (m_player.get_is_volume_prop()) {
     double volume = m_player.get_volume();
-    std::cout << volume << std::endl;
     m_volume_bar_scale_button.set_value(volume);
   }
 
@@ -118,11 +117,11 @@ PlayerWindow::PlayerWindow() : m_player() {
       });
     }
   }
-  m_song_title_label.set_label("song");
+  m_song_title_label.set_label("");
   m_song_title_label.set_halign(Gtk::Align::START);
   m_song_title_label.set_valign(Gtk::Align::CENTER);
   m_song_title_label.set_ellipsize(Pango::EllipsizeMode::END);
-  m_song_artist_label.set_label("author");
+  m_song_artist_label.set_label("");
   m_song_artist_label.set_halign(Gtk::Align::START);
   m_song_artist_label.set_valign(Gtk::Align::CENTER);
   m_song_title_label.set_ellipsize(Pango::EllipsizeMode::END);
@@ -197,17 +196,40 @@ PlayerWindow::PlayerWindow() : m_player() {
   m_add_song_to_playlist_button.set_valign(Gtk::Align::START);
   m_playlist_scrolled_window.set_valign(Gtk::Align::FILL);
   m_playlist_scrolled_window.set_halign(Gtk::Align::FILL);
+  m_playlist_scrolled_window.set_policy(Gtk::PolicyType::NEVER,
+                                        Gtk::PolicyType::AUTOMATIC);
   m_playlist_scrolled_window.set_vexpand();
   m_playlist_scrolled_window.set_hexpand();
   m_playlist_scrolled_window.set_child(m_playlist_listbox);
   m_main_grid.attach(m_add_song_to_playlist_button, 0, 0);
   m_main_grid.attach(m_playlist_scrolled_window, 1, 0, 2, 1);
-  if (m_player.get_current_player_name() == "Local") {
-    add_song_to_playlist("/home/ob3r0n/Disk_D/msui/arta.mp3");
+  m_add_song_to_playlist_button.signal_clicked().connect([this] {
+    std::cout << "Clicked" << std::endl;
+
+    auto file_dialog = Gtk::FileDialog::create();
+    file_dialog->open(
+        [file_dialog, this](Glib::RefPtr<Gio::AsyncResult> &result) -> void {
+          std::cout << "Callback" << std::endl;
+          try {
+            auto file = file_dialog->open_finish(result);
+            std::cout << "File: " << file->get_path() << std::endl;
+#ifdef SUPPORT_AUDIO_OUTPUT
+            auto opened_file = Mix_LoadMUS(file->get_path().c_str());
+            if (opened_file) {
+              add_song_to_playlist(file->get_path().c_str());
+            }
+#endif
+          } catch (Glib::Error err) {
+          }
+        });
+  });
+
+  if (m_player.get_current_player_name() != "Local") {
+    m_playlist_scrolled_window.hide();
+    m_add_song_to_playlist_button.hide();
   }
 
-#ifdef HAVE_PULSEAUDIO
-#else
+#ifndef HAVE_PULSEAUDIO
   // Code that doesn't uses PulseAudio
   std::cout << "PulseAudio not installed, making button for choosing output "
                "sound device unactive"
@@ -220,14 +242,9 @@ PlayerWindow::PlayerWindow() : m_player() {
   if (m_player.get_current_player_name() != "Local") {
 #ifdef HAVE_DBUS
     m_player.start_listening_signals();
-#endif
-  } else {
-#ifdef SUPPORT_AUDIO_OUTPUT
-    m_player.open_audio("/home/ob3r0n/Disk_D/msui/arta.mp3");
+    m_player.get_song_data();
 #endif
   }
-
-  m_player.get_song_data();
 }
 
 void PlayerWindow::on_playpause_clicked() { m_player.send_play_pause(); }
@@ -310,6 +327,16 @@ void PlayerWindow::on_player_choosed(unsigned short player_index) {
 #ifdef HAVE_DBUS
     m_player.start_listening_signals();
 #endif
+  }
+  if (m_player.get_current_player_name() == "Local") {
+    m_add_song_to_playlist_button.show();
+    m_playlist_scrolled_window.show();
+    m_main_grid.set_valign(Gtk::Align::FILL);
+  } else {
+    m_add_song_to_playlist_button.hide();
+    m_playlist_scrolled_window.hide();
+    m_main_grid.set_valign(Gtk::Align::END);
+    set_default_size(500, 100);
   }
 }
 
