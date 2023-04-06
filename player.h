@@ -69,8 +69,7 @@ private:
   double m_song_volume;
 #ifdef SUPPORT_AUDIO_OUTPUT
   Mix_Music *m_current_music = nullptr;
-  std::vector<std::pair<Mix_Music *, std::string>> m_playlist; // music - file
-                                                               // path
+  // std::vector<Mix_Music *> m_playlist;
 #endif
 
 public:
@@ -146,8 +145,8 @@ public:
   void stop_audio();
   void pause_audio();
   Mix_Music *get_music() const;
-  std::vector<std::pair<Mix_Music *, std::string>> get_playlist() const;
-  void add_to_playlist(Mix_Music *, std::string);
+  std::vector<Mix_Music *> get_playlist() const;
+  void add_to_playlist(Mix_Music *);
 #endif
 };
 #endif // PLAYER_H

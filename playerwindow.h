@@ -115,7 +115,6 @@ protected:
   Gtk::Popover m_player_choose_popover, m_device_choose_popover;
   Gtk::ListBox m_song_title_list, m_playlist_listbox;
   PlaylistRow *m_activated_row = nullptr;
-  guint m_last_click_time = 0;
   Gtk::ScrolledWindow m_playlist_scrolled_window;
   std::atomic_bool stop_flag{false}; // Flag to signal thread to stop
   std::mutex m_mutex;                // Mutex to protect shared resources

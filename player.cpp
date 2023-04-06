@@ -487,12 +487,6 @@ bool Player::send_next() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
-#ifdef SUPPORT_AUDIO_OUTPUT
-  if (m_players[m_selected_player_id].first == "Local") {
-    std::cout << "Send_next not implemented yet" << std::endl;
-    return false;
-  }
-#endif
 #ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't send Next. Aborting."
@@ -527,12 +521,6 @@ bool Player::send_previous() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
-#ifdef SUPPORT_AUDIO_OUTPUT
-  if (m_players[m_selected_player_id].first == "Local") {
-    std::cout << "send_previous not implemented yet" << std::endl;
-    return false;
-  }
-#endif
 #ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't send Previous. Aborting."
@@ -1993,20 +1981,22 @@ void Player::open_audio(const std::string &filename) {
 }
 
 void Player::play_audio() {
-  if (Mix_PausedMusic()) {
+  if (!Mix_PlayingMusic()) {
+    if (Mix_PlayMusic(m_current_music, 1) == -1) {
+      std::cout << "Mix_PlayMusic failed: " << Mix_GetError() << std::endl;
+      return;
+    }
+    // Start playing the audio
+    Mix_PlayMusic(m_current_music, 0);
+    m_is_playing = true;
+    notify_observers_is_playing_changed();
+    return;
+  } else if (!Mix_PlayingMusic() || Mix_PausedMusic()) {
     Mix_ResumeMusic();
     m_is_playing = true;
     notify_observers_is_playing_changed();
     return;
   }
-  if (Mix_PlayMusic(m_current_music, 1) == -1) {
-    std::cout << "Mix_PlayMusic failed: " << Mix_GetError() << std::endl;
-    exit(EXIT_FAILURE);
-  }
-  // Start playing the audio
-  Mix_PlayMusic(m_current_music, 0);
-  m_is_playing = true;
-  notify_observers_is_playing_changed();
 }
 
 void Player::stop_audio() {
@@ -2022,13 +2012,5 @@ void Player::pause_audio() {
 }
 
 Mix_Music *Player::get_music() const { return m_current_music; }
-
-std::vector<std::pair<Mix_Music *, std::string>> Player::get_playlist() const {
-  return m_playlist;
-}
-
-void Player::add_to_playlist(Mix_Music *music, std::string path) {
-  m_playlist.push_back(std::make_pair(music, path));
-}
 
 #endif
