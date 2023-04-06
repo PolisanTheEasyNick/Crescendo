@@ -65,7 +65,6 @@ public:
   void on_is_playing_changed(const bool &new_is_playing) override {
     std::cout << "New song isplaying PlayerWindow: " << new_is_playing
               << std::endl;
-    // m_mutex.unlock();
     if (new_is_playing) {
       // Resume the position thread
       resume_position_thread();
@@ -97,13 +96,10 @@ public:
     m_lock_pos_changing = false;
   }
 
-  void add_song_to_playlist(std::string filename);
+  void add_song_to_playlist(const std::string &filename);
 
 protected:
   Player m_player;
-  std::vector<std::tuple<std::string, std::string, std::string, std::string>>
-      m_playlist; // one tuple is: filename - title - artist - length in string
-                  // (0:00)
   void on_playpause_clicked(), on_prev_clicked(), on_next_clicked(),
       on_shuffle_clicked(), on_player_choose_clicked(),
       on_device_choose_clicked();
@@ -118,6 +114,8 @@ protected:
   VolumeButton m_volume_bar_scale_button;
   Gtk::Popover m_player_choose_popover, m_device_choose_popover;
   Gtk::ListBox m_song_title_list, m_playlist_listbox;
+  PlaylistRow *m_activated_row = nullptr;
+  guint m_last_click_time = 0;
   Gtk::ScrolledWindow m_playlist_scrolled_window;
   std::atomic_bool stop_flag{false}; // Flag to signal thread to stop
   std::mutex m_mutex;                // Mutex to protect shared resources

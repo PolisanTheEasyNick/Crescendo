@@ -49,7 +49,7 @@ Player::~Player() {
   m_proxy_signal.reset();
 #endif
 #ifdef SUPPORT_AUDIO_OUTPUT
-  Mix_FreeMusic(m_music);
+  Mix_FreeMusic(m_current_music);
   Mix_CloseAudio();
   SDL_Quit();
 #endif
@@ -364,15 +364,12 @@ bool Player::send_play_pause() {
   if (m_players[m_selected_player_id].first == "Local") {
     if (Mix_PlayingMusic() && Mix_PausedMusic()) {
       play_audio();
-      m_is_playing = true;
     } else if (Mix_PlayingMusic() && !Mix_PausedMusic()) {
       pause_audio();
-      m_is_playing = false;
     } else {
+      std::cout << "Starting playing" << std::endl;
       play_audio();
-      m_is_playing = true;
     }
-    notify_observers_is_playing_changed();
     return true;
   }
 #endif
@@ -662,7 +659,7 @@ int64_t Player::get_position() {
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    return Mix_GetMusicPosition(m_music);
+    return Mix_GetMusicPosition(m_current_music);
   }
 #endif
 #ifdef HAVE_DBUS
@@ -778,7 +775,7 @@ double Player::get_volume() {
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    return Mix_GetMusicVolume(m_music) / 128;
+    return Mix_GetMusicVolume(m_current_music) / 128;
   }
 #endif
 #ifdef HAVE_DBUS
@@ -1073,13 +1070,14 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
   std::vector<std::pair<std::string, std::string>> metadata;
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (get_current_player_name() == "Local") {
-    std::cout << "Music filename: " << Mix_GetMusicTitle(m_music) << std::endl;
+    std::cout << "Music filename: " << Mix_GetMusicTitle(m_current_music)
+              << std::endl;
     metadata.push_back(
-        std::make_pair("xesam:title", Mix_GetMusicTitle(m_music)));
+        std::make_pair("xesam:title", Mix_GetMusicTitle(m_current_music)));
     metadata.push_back(
-        std::make_pair("xesam:artist", Mix_GetMusicArtistTag(m_music)));
+        std::make_pair("xesam:artist", Mix_GetMusicArtistTag(m_current_music)));
     metadata.push_back(std::make_pair(
-        "mpris:length", std::to_string(Mix_MusicDuration(m_music))));
+        "mpris:length", std::to_string(Mix_MusicDuration(m_current_music))));
     return metadata;
   }
 #endif
@@ -1951,7 +1949,7 @@ void Player::notify_observers_song_position_changed() {
 #ifdef SUPPORT_AUDIO_OUTPUT
 
 void Player::open_audio(const std::string &filename) {
-  Mix_FreeMusic(m_music);
+  Mix_FreeMusic(m_current_music);
   SF_INFO info = {0};
   SNDFILE *sndfile = sf_open(filename.c_str(), SFM_READ, &info);
   if (!sndfile) {
@@ -1975,14 +1973,14 @@ void Player::open_audio(const std::string &filename) {
     std::cout << "Failed to open audio: " << Mix_GetError() << std::endl;
     return;
   }
-  m_music = Mix_LoadMUS(filename.c_str());
-  if (!m_music) {
+  m_current_music = Mix_LoadMUS(filename.c_str());
+  if (!m_current_music) {
     std::cout << "Mix_LoadMUS failed: " << Mix_GetError() << std::endl;
     exit(EXIT_FAILURE);
   }
-  m_song_title = Mix_GetMusicTitle(m_music);
-  m_song_artist = Mix_GetMusicArtistTag(m_music);
-  m_song_length = Mix_MusicDuration(m_music);
+  m_song_title = Mix_GetMusicTitle(m_current_music);
+  m_song_artist = Mix_GetMusicArtistTag(m_current_music);
+  m_song_length = Mix_MusicDuration(m_current_music);
   m_song_length_str = Helper::get_instance().format_time(m_song_length);
   std::cout << "Title: " << m_song_title << std::endl;
   notify_observers_song_title_changed();
@@ -1990,6 +1988,8 @@ void Player::open_audio(const std::string &filename) {
   notify_observers_song_artist_changed();
   std::cout << "Length (seconds): " << m_song_length << std::endl;
   notify_observers_song_length_changed();
+  m_song_pos = 0;
+  notify_observers_song_position_changed();
 }
 
 void Player::play_audio() {
@@ -1999,12 +1999,12 @@ void Player::play_audio() {
     notify_observers_is_playing_changed();
     return;
   }
-  if (Mix_PlayMusic(m_music, 1) == -1) {
+  if (Mix_PlayMusic(m_current_music, 1) == -1) {
     std::cout << "Mix_PlayMusic failed: " << Mix_GetError() << std::endl;
     exit(EXIT_FAILURE);
   }
   // Start playing the audio
-  Mix_PlayMusic(m_music, 0);
+  Mix_PlayMusic(m_current_music, 0);
   m_is_playing = true;
   notify_observers_is_playing_changed();
 }
@@ -2021,6 +2021,14 @@ void Player::pause_audio() {
   notify_observers_is_playing_changed();
 }
 
-Mix_Music *Player::get_music() const { return m_music; }
+Mix_Music *Player::get_music() const { return m_current_music; }
+
+std::vector<std::pair<Mix_Music *, std::string>> Player::get_playlist() const {
+  return m_playlist;
+}
+
+void Player::add_to_playlist(Mix_Music *music, std::string path) {
+  m_playlist.push_back(std::make_pair(music, path));
+}
 
 #endif

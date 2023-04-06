@@ -85,7 +85,6 @@ PlayerWindow::PlayerWindow() : m_player() {
   GListModel *model = controllers->gobj();
   int n_controllers = g_list_model_get_n_items(model);
   for (int i = 0; i < n_controllers; i++) {
-    g_list_model_get_item(model, i);
     GObject *controller_gobj = (GObject *)g_list_model_get_item(model, i);
     auto click_controller = Glib::wrap(controller_gobj, false);
     auto gesture_click =
@@ -202,18 +201,28 @@ PlayerWindow::PlayerWindow() : m_player() {
   m_playlist_scrolled_window.set_hexpand();
   m_playlist_scrolled_window.set_margin_start(50);
   m_playlist_scrolled_window.set_child(m_playlist_listbox);
+  m_playlist_listbox.set_show_separators();
+
+  m_playlist_listbox.signal_row_activated().connect(
+      [this](Gtk::ListBoxRow *row) {
+        std::cout << "Signal row activated" << std::endl;
+        auto playlist_row = dynamic_cast<PlaylistRow *>(row);
+        m_player.open_audio(playlist_row->get_filename());
+        if (m_activated_row != NULL) {
+          std::cout << "Activated not null" << std::endl;
+          m_activated_row->stop_highlight();
+        }
+        playlist_row->highlight();
+        m_activated_row = playlist_row;
+      });
   m_main_grid.attach(m_add_song_to_playlist_button, 0, 0);
   m_main_grid.attach(m_playlist_scrolled_window, 0, 0, 3, 1);
   m_add_song_to_playlist_button.signal_clicked().connect([this] {
-    std::cout << "Clicked" << std::endl;
-
     auto file_dialog = Gtk::FileDialog::create();
     file_dialog->open(
         [file_dialog, this](Glib::RefPtr<Gio::AsyncResult> &result) -> void {
-          std::cout << "Callback" << std::endl;
           try {
             auto file = file_dialog->open_finish(result);
-            std::cout << "File: " << file->get_path() << std::endl;
 #ifdef SUPPORT_AUDIO_OUTPUT
             auto opened_file = Mix_LoadMUS(file->get_path().c_str());
             if (opened_file) {
@@ -250,10 +259,22 @@ PlayerWindow::PlayerWindow() : m_player() {
 
 void PlayerWindow::on_playpause_clicked() {
 #ifdef SUPPORT_AUDIO_OUTPUT
+  for (auto &file : m_player.get_playlist()) {
+    std::cout << "File: " << file.second << std::endl;
+  }
   if (m_player.get_current_player_name() == "Local" &&
       m_player.get_music() == NULL) {
-    if (m_playlist.size() != 0) {
-      m_player.open_audio(std::get<0>(m_playlist[0]));
+    if (m_player.get_playlist().size() != 0) {
+      m_player.open_audio(m_player.get_playlist()[0].second);
+      auto listbox = dynamic_cast<Gtk::ListBox *>(
+          m_playlist_scrolled_window.get_child()->get_first_child());
+      if (listbox) {
+        auto listitem =
+            dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(0));
+        if (listitem) {
+          listitem->highlight();
+        }
+      }
     } else {
       auto error_dialog = Gtk::AlertDialog::create(
           "You need to add song or choose another player");
@@ -493,10 +514,16 @@ void PlayerWindow::pause_position_thread() { m_wait = true; }
 
 void PlayerWindow::resume_position_thread() {
   if (!m_position_thread.joinable()) {
+    stop_flag = false;
+    m_position_thread =
+        std::thread(&PlayerWindow::update_position_thread, this);
+  } else {
+    stop_flag = true;
+    m_position_thread.join();
+    stop_flag = false;
     m_position_thread =
         std::thread(&PlayerWindow::update_position_thread, this);
   }
-  stop_flag = false;
 }
 
 void PlayerWindow::stop_position_thread() {
@@ -506,7 +533,7 @@ void PlayerWindow::stop_position_thread() {
   }
 }
 
-void PlayerWindow::add_song_to_playlist(std::string filename) {
+void PlayerWindow::add_song_to_playlist(const std::string &filename) {
 #ifdef SUPPORT_AUDIO_OUTPUT
   Mix_Music *music = Mix_LoadMUS(filename.c_str());
   if (!music) {
@@ -517,8 +544,8 @@ void PlayerWindow::add_song_to_playlist(std::string filename) {
   std::string song_artist = Mix_GetMusicArtistTag(music);
   std::string song_length =
       Helper::get_instance().format_time(Mix_MusicDuration(music));
-  m_playlist.push_back(
-      std::make_tuple(filename, song_title, song_artist, song_length));
+
+  m_player.add_to_playlist(music, filename);
   m_playlist_listbox.append(*Gtk::make_managed<PlaylistRow>(
       song_title, song_artist, song_length, filename));
 #endif
