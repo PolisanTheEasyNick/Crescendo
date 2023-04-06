@@ -1878,6 +1878,8 @@ void Player::get_song_data() {
     if (info.first == "mpris:length") {
       std::cout << "Got metadata length: " << info.second << std::endl;
       int64_t length = stoi(info.second);
+      if (length == -1)
+        length = 0;
       std::cout << "Stoi: " << length << std::endl;
       if (get_current_player_name() != "Local")
         length /= 1000000;
@@ -1899,6 +1901,8 @@ void Player::get_song_data() {
   m_song_volume = get_volume();
   notify_observers_song_volume_changed();
   m_song_pos = get_position();
+  if (m_song_pos == -1)
+    m_song_pos = 0;
   notify_observers_song_position_changed();
 }
 
@@ -2016,5 +2020,7 @@ void Player::pause_audio() {
   m_is_playing = false;
   notify_observers_is_playing_changed();
 }
+
+Mix_Music *Player::get_music() const { return m_music; }
 
 #endif

@@ -143,6 +143,7 @@ public:
   void play_audio();
   void stop_audio();
   void pause_audio();
+  Mix_Music *get_music() const;
 #endif
 };
 #endif // PLAYER_H

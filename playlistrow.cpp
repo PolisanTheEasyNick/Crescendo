@@ -1,15 +1,25 @@
 #include "playlistrow.h"
 
 PlaylistRow::PlaylistRow(const std::string &author, const std::string &title,
-                         const std::string &duration) {
+                         const std::string &duration,
+                         const std::string &filename) {
   // Create a grid with 3 columns
   Gtk::Grid *grid = Gtk::make_managed<Gtk::Grid>();
   grid->set_column_spacing(10);
   grid->set_halign(Gtk::Align::FILL);
   grid->set_valign(Gtk::Align::FILL);
   grid->set_hexpand();
-  Gtk::Label *label_author_title =
-      Gtk::make_managed<Gtk::Label>(author + " - " + title);
+  Gtk::Label *label_author_title = Gtk::make_managed<Gtk::Label>();
+  if (author != "" && title != "") {
+    label_author_title->set_label(author + " - " + title);
+  } else if (author == "" && title != "") {
+    label_author_title->set_label(title);
+  } else if (author != "" && title == "") {
+    label_author_title->set_label(author);
+  } else {
+    label_author_title->set_label(filename);
+  }
+
   label_author_title->set_halign(Gtk::Align::START);
   label_author_title->set_valign(Gtk::Align::CENTER);
   label_author_title->set_hexpand();

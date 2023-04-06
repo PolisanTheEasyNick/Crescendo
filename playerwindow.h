@@ -8,6 +8,7 @@
 #include <chrono>
 #include <gio/gfile.h>
 #include <glib.h>
+#include <gtkmm/alertdialog.h>
 #include <gtkmm/application.h>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/box.h>

@@ -31,7 +31,7 @@ PlayerWindow::PlayerWindow() : m_player() {
   m_main_grid.set_vexpand(true);
   m_shuffle_button.set_icon_name("media-playlist-shuffle");
   m_prev_button.set_icon_name("media-skip-backward");
-  m_playpause_button.set_icon_name("media-playback-pause");
+  m_playpause_button.set_icon_name("media-playback-start");
   m_next_button.set_icon_name("media-skip-forward");
 
   m_control_buttons_box.set_orientation(Gtk::Orientation::HORIZONTAL);
@@ -200,9 +200,10 @@ PlayerWindow::PlayerWindow() : m_player() {
                                         Gtk::PolicyType::AUTOMATIC);
   m_playlist_scrolled_window.set_vexpand();
   m_playlist_scrolled_window.set_hexpand();
+  m_playlist_scrolled_window.set_margin_start(50);
   m_playlist_scrolled_window.set_child(m_playlist_listbox);
   m_main_grid.attach(m_add_song_to_playlist_button, 0, 0);
-  m_main_grid.attach(m_playlist_scrolled_window, 1, 0, 2, 1);
+  m_main_grid.attach(m_playlist_scrolled_window, 0, 0, 3, 1);
   m_add_song_to_playlist_button.signal_clicked().connect([this] {
     std::cout << "Clicked" << std::endl;
 
@@ -247,7 +248,22 @@ PlayerWindow::PlayerWindow() : m_player() {
   }
 }
 
-void PlayerWindow::on_playpause_clicked() { m_player.send_play_pause(); }
+void PlayerWindow::on_playpause_clicked() {
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_player.get_current_player_name() == "Local" &&
+      m_player.get_music() == NULL) {
+    if (m_playlist.size() != 0) {
+      m_player.open_audio(std::get<0>(m_playlist[0]));
+    } else {
+      auto error_dialog = Gtk::AlertDialog::create(
+          "You need to add song or choose another player");
+      error_dialog->show(*this);
+      return;
+    }
+  }
+#endif
+  m_player.send_play_pause();
+}
 
 void PlayerWindow::on_prev_clicked() { m_player.send_previous(); }
 
@@ -448,9 +464,6 @@ void PlayerWindow::update_position_thread() {
 
       //  Access shared resources here
       if (!m_player.get_playback_status()) {
-        bool status = m_player.get_playback_status();
-        std::cout << "Current playback status: " << status << std::endl;
-        std::cout << "Breaking" << std::endl;
         m_progress_bar_song_scale.set_value(0.0);
         m_progress_bar_song_scale.queue_draw();
         m_current_pos_label.set_label("0:00");
@@ -506,7 +519,7 @@ void PlayerWindow::add_song_to_playlist(std::string filename) {
       Helper::get_instance().format_time(Mix_MusicDuration(music));
   m_playlist.push_back(
       std::make_tuple(filename, song_title, song_artist, song_length));
-  m_playlist_listbox.append(
-      *Gtk::make_managed<PlaylistRow>(song_title, song_artist, song_length));
+  m_playlist_listbox.append(*Gtk::make_managed<PlaylistRow>(
+      song_title, song_artist, song_length, filename));
 #endif
 }
