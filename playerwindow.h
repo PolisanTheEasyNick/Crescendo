@@ -96,10 +96,16 @@ public:
     m_lock_pos_changing = false;
   }
 
+#ifdef SUPPORT_AUDIO_OUTPUT
   void add_song_to_playlist(const std::string &filename);
+  static void on_music_ends();
+  static unsigned int m_current_track;
+  // static Glib::RefPtr<Gtk::ScrolledWindow> m_playlist_scrolled_window;
+  static Gtk::ScrolledWindow *m_playlist_scrolled_window;
+#endif
 
 protected:
-  Player m_player;
+  static Player m_player;
   void on_playpause_clicked(), on_prev_clicked(), on_next_clicked(),
       on_shuffle_clicked(), on_player_choose_clicked(),
       on_device_choose_clicked();
@@ -114,8 +120,7 @@ protected:
   VolumeButton m_volume_bar_scale_button;
   Gtk::Popover m_player_choose_popover, m_device_choose_popover;
   Gtk::ListBox m_song_title_list, m_playlist_listbox;
-  PlaylistRow *m_activated_row = nullptr;
-  Gtk::ScrolledWindow m_playlist_scrolled_window;
+  static PlaylistRow *m_activated_row;
   std::atomic_bool stop_flag{false}; // Flag to signal thread to stop
   std::mutex m_mutex;                // Mutex to protect shared resources
   std::thread m_position_thread;     // Thread for updating position

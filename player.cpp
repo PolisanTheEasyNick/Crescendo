@@ -1982,12 +1982,12 @@ void Player::open_audio(const std::string &filename) {
 
 void Player::play_audio() {
   if (!Mix_PlayingMusic()) {
-    if (Mix_PlayMusic(m_current_music, 1) == -1) {
+    // Start playing the audio
+    if (Mix_PlayMusic(m_current_music, 0) == -1) {
       std::cout << "Mix_PlayMusic failed: " << Mix_GetError() << std::endl;
       return;
     }
-    // Start playing the audio
-    Mix_PlayMusic(m_current_music, 0);
+
     m_is_playing = true;
     notify_observers_is_playing_changed();
     return;

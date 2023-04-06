@@ -1,7 +1,14 @@
 #include "playerwindow.h"
 
-PlayerWindow::PlayerWindow() : m_player() {
+Player PlayerWindow::m_player;
+unsigned int PlayerWindow::m_current_track = -1;
+// Glib::RefPtr<Gtk::ScrolledWindow> m_playlist_scrolled_window = nullptr;
+Gtk::ScrolledWindow *PlayerWindow::m_playlist_scrolled_window = nullptr;
+PlaylistRow *PlayerWindow::m_activated_row = nullptr;
+
+PlayerWindow::PlayerWindow() {
   m_player.add_observer(this);
+  m_playlist_scrolled_window = new Gtk::ScrolledWindow();
   // setup current choosed player
   if (m_player.get_shuffle()) {
     m_shuffle_button.get_style_context()->add_class("shuffle-enabled");
@@ -203,19 +210,20 @@ PlayerWindow::PlayerWindow() : m_player() {
   m_add_song_to_playlist_button.set_size_request(10, 10);
   m_add_song_to_playlist_button.set_halign(Gtk::Align::START);
   m_add_song_to_playlist_button.set_valign(Gtk::Align::START);
-  m_playlist_scrolled_window.set_valign(Gtk::Align::FILL);
-  m_playlist_scrolled_window.set_halign(Gtk::Align::FILL);
-  m_playlist_scrolled_window.set_policy(Gtk::PolicyType::NEVER,
-                                        Gtk::PolicyType::AUTOMATIC);
-  m_playlist_scrolled_window.set_vexpand();
-  m_playlist_scrolled_window.set_hexpand();
-  m_playlist_scrolled_window.set_margin_start(50);
-  m_playlist_scrolled_window.set_child(m_playlist_listbox);
+  m_playlist_scrolled_window->set_valign(Gtk::Align::FILL);
+  m_playlist_scrolled_window->set_halign(Gtk::Align::FILL);
+  m_playlist_scrolled_window->set_policy(Gtk::PolicyType::NEVER,
+                                         Gtk::PolicyType::AUTOMATIC);
+  m_playlist_scrolled_window->set_vexpand();
+  m_playlist_scrolled_window->set_hexpand();
+  m_playlist_scrolled_window->set_margin_start(50);
+  m_playlist_scrolled_window->set_child(m_playlist_listbox);
   m_playlist_listbox.set_show_separators();
 
   m_playlist_listbox.signal_row_activated().connect(
       [this](Gtk::ListBoxRow *row) {
         auto playlist_row = dynamic_cast<PlaylistRow *>(row);
+        m_current_track = playlist_row->get_index();
         m_player.open_audio(playlist_row->get_filename());
         if (m_activated_row != NULL) {
           m_activated_row->stop_highlight();
@@ -227,7 +235,7 @@ PlayerWindow::PlayerWindow() : m_player() {
         }
       });
   m_main_grid.attach(m_add_song_to_playlist_button, 0, 0);
-  m_main_grid.attach(m_playlist_scrolled_window, 0, 0, 3, 1);
+  m_main_grid.attach(*m_playlist_scrolled_window, 0, 0, 3, 1);
   m_add_song_to_playlist_button.signal_clicked().connect([this] {
     auto file_dialog = Gtk::FileDialog::create();
     file_dialog->open(
@@ -239,6 +247,7 @@ PlayerWindow::PlayerWindow() : m_player() {
             if (opened_file) {
               add_song_to_playlist(file->get_path().c_str());
             }
+            Mix_HookMusicFinished(&PlayerWindow::on_music_ends);
 #endif
           } catch (Glib::Error err) {
           }
@@ -246,7 +255,7 @@ PlayerWindow::PlayerWindow() : m_player() {
   });
 
   if (m_player.get_current_player_name() != "Local") {
-    m_playlist_scrolled_window.hide();
+    m_playlist_scrolled_window->hide();
     m_add_song_to_playlist_button.hide();
   }
 
@@ -284,13 +293,14 @@ void PlayerWindow::on_playpause_clicked() {
           NULL) { // no chosen song and playpause clicked, picking first song
 
     auto listbox = dynamic_cast<Gtk::ListBox *>(
-        m_playlist_scrolled_window.get_child()->get_first_child());
+        m_playlist_scrolled_window->get_child()->get_first_child());
     if (listbox) {
       int n_children = listbox->observe_children()->get_n_items();
       if (n_children != 0) {
         auto listitem =
             dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(0));
         if (listitem) {
+          m_current_track = 0;
           if (m_activated_row)
             m_activated_row->stop_highlight();
           m_activated_row = listitem;
@@ -311,7 +321,45 @@ void PlayerWindow::on_playpause_clicked() {
   m_player.send_play_pause();
 }
 
-void PlayerWindow::on_prev_clicked() { m_player.send_previous(); }
+void PlayerWindow::on_prev_clicked() {
+  if (m_player.get_current_player_name() == "Local") {
+    std::cout << "Prev clicked" << std::endl;
+    auto listbox = dynamic_cast<Gtk::ListBox *>(
+        m_playlist_scrolled_window->get_child()->get_first_child());
+    if (listbox) {
+      int n_children = listbox->observe_children()->get_n_items();
+      for (int i = 0; i < n_children; i++) {
+        auto listitem =
+            dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(i));
+        if (listitem == m_activated_row) {
+          std::cout << "Current song: " << listitem->get_filename()
+                    << std::endl;
+          auto next_list_item =
+              dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(i - 1));
+          if (next_list_item) {
+            std::cout << "Prev song: " << next_list_item->get_filename()
+                      << std::endl;
+            m_player.open_audio(next_list_item->get_filename());
+            if (m_player.get_is_playing())
+              m_player.play_audio();
+            if (m_activated_row)
+              m_activated_row->stop_highlight();
+            m_activated_row = next_list_item;
+            m_activated_row->highlight();
+            stop_flag = false;
+            return;
+          } else {
+            std::cout << "No prev song." << std::endl;
+            return;
+          }
+        }
+      }
+      std::cout << "No song picked at all." << std::endl;
+    }
+    return;
+  }
+  m_player.send_previous();
+}
 
 void PlayerWindow::on_next_clicked() {
 
@@ -319,7 +367,7 @@ void PlayerWindow::on_next_clicked() {
   if (m_player.get_current_player_name() == "Local") {
     std::cout << "Next clicked" << std::endl;
     auto listbox = dynamic_cast<Gtk::ListBox *>(
-        m_playlist_scrolled_window.get_child()->get_first_child());
+        m_playlist_scrolled_window->get_child()->get_first_child());
     if (listbox) {
       int n_children = listbox->observe_children()->get_n_items();
       for (int i = 0; i < n_children; i++) {
@@ -433,11 +481,11 @@ void PlayerWindow::on_player_choosed(unsigned short player_index) {
   }
   if (m_player.get_current_player_name() == "Local") {
     m_add_song_to_playlist_button.show();
-    m_playlist_scrolled_window.show();
+    m_playlist_scrolled_window->show();
     m_main_grid.set_valign(Gtk::Align::FILL);
   } else {
     m_add_song_to_playlist_button.hide();
-    m_playlist_scrolled_window.hide();
+    m_playlist_scrolled_window->hide();
     m_main_grid.set_valign(Gtk::Align::END);
     set_default_size(500, 100);
   }
@@ -615,5 +663,37 @@ void PlayerWindow::add_song_to_playlist(const std::string &filename) {
 
   m_playlist_listbox.append(*Gtk::make_managed<PlaylistRow>(
       song_title, song_artist, song_length, filename));
+#endif
+}
+
+void PlayerWindow::on_music_ends() {
+#ifdef SUPPORT_AUDIO_OUTPUT
+  std::cout << "On music ends" << std::endl;
+  if (m_current_track == -1) {
+    std::cout << "WARNING: m_current_track is unitialized." << std::endl;
+    m_current_track = 0;
+  }
+  m_current_track++;
+  auto listbox = dynamic_cast<Gtk::ListBox *>(
+      m_playlist_scrolled_window->get_child()->get_first_child());
+  int n_children = 0;
+  if (listbox) {
+    n_children = listbox->observe_children()->get_n_items();
+  }
+
+  if (m_current_track >= n_children) {
+    // If we reached the end of the playlist, go back to the beginning
+    // After creating loop button functionality need to update this piece of
+    // code
+    m_current_track = 0;
+  }
+  m_activated_row->stop_highlight();
+  auto next_list_item =
+      dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(m_current_track));
+  m_activated_row = next_list_item;
+  m_activated_row->highlight();
+  m_player.open_audio(next_list_item->get_filename());
+  m_player.play_audio();
+
 #endif
 }
