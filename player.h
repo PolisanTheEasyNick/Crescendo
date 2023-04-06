@@ -3,6 +3,7 @@
 
 #include "helper.h"
 #include "pugixml.hpp"
+#include <algorithm>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
@@ -20,9 +21,6 @@
 #include <SDL2/SDL_mixer.h>
 #include <mutex>
 #include <sndfile.h>
-#include <taglib/fileref.h>
-#include <taglib/tag.h>
-#include <taglib/tpropertymap.h>
 #include <unistd.h>
 #endif
 
@@ -48,6 +46,7 @@ private:
   std::vector<std::pair<std::string, unsigned short>>
       m_devices; // Name: pulseaudio sink index
   std::list<PlayerObserver *> m_observers;
+
 #ifdef HAVE_DBUS
   std::unique_ptr<sdbus::IConnection> m_dbus_conn;
   std::unique_ptr<sdbus::IProxy> m_proxy_signal;
@@ -71,7 +70,8 @@ private:
   bool m_is_shuffle, m_is_playing;
   double m_song_volume;
 #ifdef SUPPORT_AUDIO_OUTPUT
-  Mix_Music *m_music = nullptr;
+  Mix_Music *m_current_music = nullptr;
+  // std::vector<Mix_Music *> m_playlist;
 #endif
 
 public:
@@ -146,6 +146,9 @@ public:
   void play_audio();
   void stop_audio();
   void pause_audio();
+  Mix_Music *get_music() const;
+  std::vector<Mix_Music *> get_playlist() const;
+  void add_to_playlist(Mix_Music *);
 #endif
 };
 #endif // PLAYER_H

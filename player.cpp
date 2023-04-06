@@ -21,15 +21,15 @@ Player::Player() {
   get_players();
   if (m_players.size() != 0) {
     if (select_player(0)) {
-      if (m_players[m_selected_player_id].first != "Local") {
+      if (m_players[m_selected_player_id].first == "Local") {
         std::cout << "Selected local player." << std::endl;
       } else {
         std::cout << "Selected player: "
                   << m_players[m_selected_player_id].first << " at "
                   << m_players[m_selected_player_id].second << std::endl;
+        get_song_data();
       }
     };
-    get_song_data();
   }
 
 #ifdef SUPPORT_AUDIO_OUTPUT
@@ -49,7 +49,7 @@ Player::~Player() {
   m_proxy_signal.reset();
 #endif
 #ifdef SUPPORT_AUDIO_OUTPUT
-  Mix_FreeMusic(m_music);
+  Mix_FreeMusic(m_current_music);
   Mix_CloseAudio();
   SDL_Quit();
 #endif
@@ -364,15 +364,12 @@ bool Player::send_play_pause() {
   if (m_players[m_selected_player_id].first == "Local") {
     if (Mix_PlayingMusic() && Mix_PausedMusic()) {
       play_audio();
-      m_is_playing = true;
     } else if (Mix_PlayingMusic() && !Mix_PausedMusic()) {
       pause_audio();
-      m_is_playing = false;
     } else {
+      std::cout << "Starting playing" << std::endl;
       play_audio();
-      m_is_playing = true;
     }
-    notify_observers_is_playing_changed();
     return true;
   }
 #endif
@@ -490,12 +487,6 @@ bool Player::send_next() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
-#ifdef SUPPORT_AUDIO_OUTPUT
-  if (m_players[m_selected_player_id].first == "Local") {
-    std::cout << "Send_next not implemented yet" << std::endl;
-    return false;
-  }
-#endif
 #ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't send Next. Aborting."
@@ -530,12 +521,6 @@ bool Player::send_previous() {
     std::cout << "Player not selected, can't continue." << std::endl;
     return false;
   }
-#ifdef SUPPORT_AUDIO_OUTPUT
-  if (m_players[m_selected_player_id].first == "Local") {
-    std::cout << "send_previous not implemented yet" << std::endl;
-    return false;
-  }
-#endif
 #ifdef HAVE_DBUS
   if (!m_dbus_conn) {
     std::cout << "Not connected to DBus, can't send Previous. Aborting."
@@ -662,7 +647,7 @@ int64_t Player::get_position() {
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    return Mix_GetMusicPosition(m_music);
+    return Mix_GetMusicPosition(m_current_music);
   }
 #endif
 #ifdef HAVE_DBUS
@@ -778,7 +763,7 @@ double Player::get_volume() {
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    return Mix_GetMusicVolume(m_music) / 128;
+    return Mix_GetMusicVolume(m_current_music) / 128;
   }
 #endif
 #ifdef HAVE_DBUS
@@ -1073,13 +1058,14 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
   std::vector<std::pair<std::string, std::string>> metadata;
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (get_current_player_name() == "Local") {
-    std::cout << "Music filename: " << Mix_GetMusicTitle(m_music) << std::endl;
+    std::cout << "Music filename: " << Mix_GetMusicTitle(m_current_music)
+              << std::endl;
     metadata.push_back(
-        std::make_pair("xesam:title", Mix_GetMusicTitle(m_music)));
+        std::make_pair("xesam:title", Mix_GetMusicTitle(m_current_music)));
     metadata.push_back(
-        std::make_pair("xesam:artist", Mix_GetMusicArtistTag(m_music)));
+        std::make_pair("xesam:artist", Mix_GetMusicArtistTag(m_current_music)));
     metadata.push_back(std::make_pair(
-        "mpris:length", std::to_string(Mix_MusicDuration(m_music))));
+        "mpris:length", std::to_string(Mix_MusicDuration(m_current_music))));
     return metadata;
   }
 #endif
@@ -1846,6 +1832,7 @@ void Player::add_observer(PlayerObserver *observer) {
 }
 
 void Player::remove_observer(PlayerObserver *observer) {
+
   m_observers.erase(
       std::remove(m_observers.begin(), m_observers.end(), observer),
       m_observers.end());
@@ -1878,6 +1865,8 @@ void Player::get_song_data() {
     if (info.first == "mpris:length") {
       std::cout << "Got metadata length: " << info.second << std::endl;
       int64_t length = stoi(info.second);
+      if (length == -1)
+        length = 0;
       std::cout << "Stoi: " << length << std::endl;
       if (get_current_player_name() != "Local")
         length /= 1000000;
@@ -1899,6 +1888,8 @@ void Player::get_song_data() {
   m_song_volume = get_volume();
   notify_observers_song_volume_changed();
   m_song_pos = get_position();
+  if (m_song_pos == -1)
+    m_song_pos = 0;
   notify_observers_song_position_changed();
 }
 
@@ -1947,23 +1938,16 @@ void Player::notify_observers_song_position_changed() {
 #ifdef SUPPORT_AUDIO_OUTPUT
 
 void Player::open_audio(const std::string &filename) {
-  Mix_FreeMusic(m_music);
-  const char *path = "/home/ob3r0n/Disk_D/msui/arta.mp3";
+  Mix_FreeMusic(m_current_music);
   SF_INFO info = {0};
-  SNDFILE *sndfile = sf_open(path, SFM_READ, &info);
+  SNDFILE *sndfile = sf_open(filename.c_str(), SFM_READ, &info);
   if (!sndfile) {
-    std::cout << "Error opening file " << path << ": " << sf_strerror(sndfile)
-              << std::endl;
+    std::cout << "Error opening file " << filename.c_str() << ": "
+              << sf_strerror(sndfile) << std::endl;
     return;
   }
 
-  TagLib::FileRef f(filename.c_str());
-  if (f.isNull()) {
-    std::cout << "Cant open file" << std::endl;
-    return;
-  }
-
-  std::cout << "Audio file: " << path << std::endl;
+  std::cout << "Audio file: " << filename.c_str() << std::endl;
   std::cout << "Sample rate: " << info.samplerate << std::endl;
   std::cout << "Channels: " << info.channels << std::endl;
 
@@ -1978,14 +1962,14 @@ void Player::open_audio(const std::string &filename) {
     std::cout << "Failed to open audio: " << Mix_GetError() << std::endl;
     return;
   }
-  m_music = Mix_LoadMUS(filename.c_str());
-  if (!m_music) {
+  m_current_music = Mix_LoadMUS(filename.c_str());
+  if (!m_current_music) {
     std::cout << "Mix_LoadMUS failed: " << Mix_GetError() << std::endl;
     exit(EXIT_FAILURE);
   }
-  m_song_title = Mix_GetMusicTitle(m_music);
-  m_song_artist = Mix_GetMusicArtistTag(m_music);
-  m_song_length = Mix_MusicDuration(m_music);
+  m_song_title = Mix_GetMusicTitle(m_current_music);
+  m_song_artist = Mix_GetMusicArtistTag(m_current_music);
+  m_song_length = Mix_MusicDuration(m_current_music);
   m_song_length_str = Helper::get_instance().format_time(m_song_length);
   std::cout << "Title: " << m_song_title << std::endl;
   notify_observers_song_title_changed();
@@ -1993,23 +1977,27 @@ void Player::open_audio(const std::string &filename) {
   notify_observers_song_artist_changed();
   std::cout << "Length (seconds): " << m_song_length << std::endl;
   notify_observers_song_length_changed();
+  m_song_pos = 0;
+  notify_observers_song_position_changed();
 }
 
 void Player::play_audio() {
-  if (Mix_PausedMusic()) {
+  if (!Mix_PlayingMusic()) {
+    // Start playing the audio
+    if (Mix_PlayMusic(m_current_music, 0) == -1) {
+      std::cout << "Mix_PlayMusic failed: " << Mix_GetError() << std::endl;
+      return;
+    }
+
+    m_is_playing = true;
+    notify_observers_is_playing_changed();
+    return;
+  } else if (!Mix_PlayingMusic() || Mix_PausedMusic()) {
     Mix_ResumeMusic();
     m_is_playing = true;
     notify_observers_is_playing_changed();
     return;
   }
-  if (Mix_PlayMusic(m_music, 1) == -1) {
-    std::cout << "Mix_PlayMusic failed: " << Mix_GetError() << std::endl;
-    exit(EXIT_FAILURE);
-  }
-  // Start playing the audio
-  Mix_PlayMusic(m_music, 0);
-  m_is_playing = true;
-  notify_observers_is_playing_changed();
 }
 
 void Player::stop_audio() {
@@ -2023,5 +2011,7 @@ void Player::pause_audio() {
   m_is_playing = false;
   notify_observers_is_playing_changed();
 }
+
+Mix_Music *Player::get_music() const { return m_current_music; }
 
 #endif

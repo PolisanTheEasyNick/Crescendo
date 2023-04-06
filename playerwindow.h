@@ -2,15 +2,19 @@
 #define PLAYERWINDOW_H
 
 #include "player.h"
+#include "playlistrow.h"
 #include "volumebutton.h"
 #include <atomic>
 #include <chrono>
+#include <gio/gfile.h>
 #include <glib.h>
+#include <gtkmm/alertdialog.h>
 #include <gtkmm/application.h>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/cssprovider.h>
+#include <gtkmm/filedialog.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/gesturelongpress.h>
 #include <gtkmm/grid.h>
@@ -23,8 +27,10 @@
 #include <gtkmm/togglebutton.h>
 #include <gtkmm/viewport.h>
 #include <mutex>
+#include <random>
 #include <sigc++/signal.h>
 #include <thread>
+#include <tuple>
 
 class PlayerWindow : public Gtk::ApplicationWindow, public PlayerObserver {
 public:
@@ -60,7 +66,6 @@ public:
   void on_is_playing_changed(const bool &new_is_playing) override {
     std::cout << "New song isplaying PlayerWindow: " << new_is_playing
               << std::endl;
-    // m_mutex.unlock();
     if (new_is_playing) {
       // Resume the position thread
       resume_position_thread();
@@ -92,21 +97,31 @@ public:
     m_lock_pos_changing = false;
   }
 
+#ifdef SUPPORT_AUDIO_OUTPUT
+  void add_song_to_playlist(const std::string &filename);
+  static void on_music_ends();
+  static unsigned int m_current_track;
+  // static Glib::RefPtr<Gtk::ScrolledWindow> m_playlist_scrolled_window;
+  static Gtk::ScrolledWindow *m_playlist_scrolled_window;
+#endif
+
 protected:
-  Player m_player;
+  static Player m_player;
   void on_playpause_clicked(), on_prev_clicked(), on_next_clicked(),
       on_shuffle_clicked(), on_player_choose_clicked(),
       on_device_choose_clicked();
   Gtk::Grid m_main_grid;
   Gtk::Box m_control_buttons_box, m_volume_and_player_box;
   Gtk::Button m_playpause_button, m_prev_button, m_next_button,
-      m_shuffle_button, m_player_choose_button, m_device_choose_button;
+      m_shuffle_button, m_player_choose_button, m_device_choose_button,
+      m_add_song_to_playlist_button;
   Gtk::Label m_song_title_label, m_song_artist_label, m_current_pos_label,
       m_song_length_label;
   Gtk::Scale m_progress_bar_song_scale;
   VolumeButton m_volume_bar_scale_button;
   Gtk::Popover m_player_choose_popover, m_device_choose_popover;
-  Gtk::ListBox m_song_title_list;
+  Gtk::ListBox m_song_title_list, m_playlist_listbox;
+  static PlaylistRow *m_activated_row;
   std::atomic_bool stop_flag{false}; // Flag to signal thread to stop
   std::mutex m_mutex;                // Mutex to protect shared resources
   std::thread m_position_thread;     // Thread for updating position
