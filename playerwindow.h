@@ -100,9 +100,6 @@ public:
 #ifdef SUPPORT_AUDIO_OUTPUT
   void add_song_to_playlist(const std::string &filename);
   static void on_music_ends();
-  static unsigned int m_current_track;
-  // static Glib::RefPtr<Gtk::ScrolledWindow> m_playlist_scrolled_window;
-  static Gtk::ScrolledWindow *m_playlist_scrolled_window;
 #endif
 
 protected:
@@ -126,6 +123,8 @@ protected:
   std::mutex m_mutex;                // Mutex to protect shared resources
   std::thread m_position_thread;     // Thread for updating position
   bool m_wait = false;               // Whether there is need to suspend thread
+  static unsigned int m_current_track;
+  static Gtk::ScrolledWindow *m_playlist_scrolled_window;
 
 private:
   void check_buttons_features();

@@ -744,11 +744,9 @@ uint64_t Player::get_song_length() {
   for (auto &info : metadata) {
     if (info.first == "mpris:length") {
       int64_t length = stoi(info.second);
-#ifdef SUPPORT_AUDIO_OUTPUT
       if (m_players[m_selected_player_id].first != "Local") {
         length /= 1000000;
       }
-#endif
       return length;
     }
   }

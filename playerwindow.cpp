@@ -1,10 +1,13 @@
 #include "playerwindow.h"
 
 Player PlayerWindow::m_player;
-unsigned int PlayerWindow::m_current_track = -1;
-// Glib::RefPtr<Gtk::ScrolledWindow> m_playlist_scrolled_window = nullptr;
+
 Gtk::ScrolledWindow *PlayerWindow::m_playlist_scrolled_window = nullptr;
 PlaylistRow *PlayerWindow::m_activated_row = nullptr;
+
+#ifdef SUPPORT_AUDIO_OUTPUT
+unsigned int PlayerWindow::m_current_track = -1;
+#endif
 
 PlayerWindow::PlayerWindow() {
   m_player.add_observer(this);
@@ -220,6 +223,7 @@ PlayerWindow::PlayerWindow() {
   m_playlist_scrolled_window->set_child(m_playlist_listbox);
   m_playlist_listbox.set_show_separators();
 
+#ifdef SUPPORT_AUDIO_OUTPUT
   m_playlist_listbox.signal_row_activated().connect(
       [this](Gtk::ListBoxRow *row) {
         auto playlist_row = dynamic_cast<PlaylistRow *>(row);
@@ -234,25 +238,28 @@ PlayerWindow::PlayerWindow() {
           m_player.play_audio();
         }
       });
+#endif
   m_main_grid.attach(m_add_song_to_playlist_button, 0, 0);
   m_main_grid.attach(*m_playlist_scrolled_window, 0, 0, 3, 1);
+#ifdef SUPPORT_AUDIO_OUTPUT
   m_add_song_to_playlist_button.signal_clicked().connect([this] {
     auto file_dialog = Gtk::FileDialog::create();
     file_dialog->open(
         [file_dialog, this](Glib::RefPtr<Gio::AsyncResult> &result) -> void {
           try {
             auto file = file_dialog->open_finish(result);
-#ifdef SUPPORT_AUDIO_OUTPUT
+
             auto opened_file = Mix_LoadMUS(file->get_path().c_str());
             if (opened_file) {
               add_song_to_playlist(file->get_path().c_str());
             }
             Mix_HookMusicFinished(&PlayerWindow::on_music_ends);
-#endif
+
           } catch (Glib::Error err) {
           }
         });
   });
+#endif
 
   if (m_player.get_current_player_name() != "Local") {
     m_playlist_scrolled_window->hide();
@@ -324,6 +331,7 @@ void PlayerWindow::on_playpause_clicked() {
 }
 
 void PlayerWindow::on_prev_clicked() {
+#ifdef SUPPORT_AUDIO_OUTPUT
   if (m_player.get_current_player_name() == "Local") {
     std::cout << "Prev clicked" << std::endl;
     auto listbox = dynamic_cast<Gtk::ListBox *>(
@@ -360,6 +368,7 @@ void PlayerWindow::on_prev_clicked() {
     }
     return;
   }
+#endif
   m_player.send_previous();
 }
 
@@ -674,8 +683,9 @@ void PlayerWindow::stop_position_thread() {
   }
 }
 
-void PlayerWindow::add_song_to_playlist(const std::string &filename) {
 #ifdef SUPPORT_AUDIO_OUTPUT
+void PlayerWindow::add_song_to_playlist(const std::string &filename) {
+
   Mix_Music *music = Mix_LoadMUS(filename.c_str());
   if (!music) {
     std::cout << "Mix_LoadMUS failed: " << Mix_GetError() << std::endl;
@@ -688,11 +698,11 @@ void PlayerWindow::add_song_to_playlist(const std::string &filename) {
 
   m_playlist_listbox.append(*Gtk::make_managed<PlaylistRow>(
       song_title, song_artist, song_length, filename));
-#endif
 }
+#endif
 
-void PlayerWindow::on_music_ends() {
 #ifdef SUPPORT_AUDIO_OUTPUT
+void PlayerWindow::on_music_ends() {
   std::cout << "On music ends" << std::endl;
   if (m_current_track == -1) {
     std::cout << "WARNING: m_current_track is unitialized." << std::endl;
@@ -730,6 +740,5 @@ void PlayerWindow::on_music_ends() {
   m_activated_row->highlight();
   m_player.open_audio(next_list_item->get_filename());
   m_player.play_audio();
-
-#endif
 }
+#endif
