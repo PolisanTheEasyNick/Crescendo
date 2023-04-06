@@ -289,7 +289,8 @@ PlayerWindow::PlayerWindow() {
 void PlayerWindow::on_playpause_clicked() {
 #ifdef SUPPORT_AUDIO_OUTPUT
 
-  if (m_activated_row) { // some song is already chosen
+  if (m_player.get_current_player_name() == "Local" &&
+      m_activated_row) { // some song is already chosen
     if (m_player.get_is_playing()) {
       m_player.pause_audio();
     } else {
