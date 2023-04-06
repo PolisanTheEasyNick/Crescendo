@@ -3,6 +3,7 @@
 
 #include "helper.h"
 #include "pugixml.hpp"
+#include <algorithm>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
@@ -45,6 +46,7 @@ private:
   std::vector<std::pair<std::string, unsigned short>>
       m_devices; // Name: pulseaudio sink index
   std::list<PlayerObserver *> m_observers;
+
 #ifdef HAVE_DBUS
   std::unique_ptr<sdbus::IConnection> m_dbus_conn;
   std::unique_ptr<sdbus::IProxy> m_proxy_signal;

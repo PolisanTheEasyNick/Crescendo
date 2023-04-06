@@ -257,6 +257,8 @@ PlayerWindow::PlayerWindow() {
   if (m_player.get_current_player_name() != "Local") {
     m_playlist_scrolled_window->hide();
     m_add_song_to_playlist_button.hide();
+  } else {
+    set_default_size(500, 300);
   }
 
 #ifndef HAVE_PULSEAUDIO
@@ -362,7 +364,6 @@ void PlayerWindow::on_prev_clicked() {
 }
 
 void PlayerWindow::on_next_clicked() {
-
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_player.get_current_player_name() == "Local") {
     std::cout << "Next clicked" << std::endl;
@@ -370,29 +371,52 @@ void PlayerWindow::on_next_clicked() {
         m_playlist_scrolled_window->get_child()->get_first_child());
     if (listbox) {
       int n_children = listbox->observe_children()->get_n_items();
-      for (int i = 0; i < n_children; i++) {
-        auto listitem =
-            dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(i));
-        if (listitem == m_activated_row) {
-          std::cout << "Current song: " << listitem->get_filename()
-                    << std::endl;
-          auto next_list_item =
-              dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(i + 1));
-          if (next_list_item) {
-            std::cout << "Next song: " << next_list_item->get_filename()
+      if (m_player.get_shuffle()) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, n_children - 1);
+        int new_track_index = dis(gen);
+        while (m_current_track == new_track_index) {
+          new_track_index = dis(gen);
+        }
+        m_current_track = new_track_index;
+        auto listitem = dynamic_cast<PlaylistRow *>(
+            listbox->get_row_at_index(m_current_track));
+        if (m_player.get_is_playing())
+          m_player.play_audio();
+        if (m_activated_row)
+          m_activated_row->stop_highlight();
+        m_activated_row = listitem;
+        m_activated_row->highlight();
+        m_player.open_audio(m_activated_row->get_filename());
+        if (m_player.get_is_playing())
+          m_player.play_audio();
+      } else {
+        for (int i = 0; i < n_children; i++) {
+          auto listitem =
+              dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(i));
+          if (listitem == m_activated_row) {
+            std::cout << "Current song: " << listitem->get_filename()
                       << std::endl;
-            m_player.open_audio(next_list_item->get_filename());
-            if (m_player.get_is_playing())
-              m_player.play_audio();
-            if (m_activated_row)
-              m_activated_row->stop_highlight();
-            m_activated_row = next_list_item;
-            m_activated_row->highlight();
-            stop_flag = false;
-            return;
-          } else {
-            std::cout << "No next song." << std::endl;
-            return;
+            auto next_list_item =
+                dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(i + 1));
+            if (next_list_item) {
+              std::cout << "Next song: " << next_list_item->get_filename()
+                        << std::endl;
+              m_player.open_audio(next_list_item->get_filename());
+              if (m_player.get_is_playing())
+                m_player.play_audio();
+              if (m_activated_row)
+                m_activated_row->stop_highlight();
+              m_activated_row = next_list_item;
+              m_activated_row->highlight();
+              m_current_track = m_activated_row->get_index();
+              stop_flag = false;
+              return;
+            } else {
+              std::cout << "No next song." << std::endl;
+              return;
+            }
           }
         }
       }
@@ -483,6 +507,7 @@ void PlayerWindow::on_player_choosed(unsigned short player_index) {
     m_add_song_to_playlist_button.show();
     m_playlist_scrolled_window->show();
     m_main_grid.set_valign(Gtk::Align::FILL);
+    set_default_size(500, 300);
   } else {
     m_add_song_to_playlist_button.hide();
     m_playlist_scrolled_window->hide();
@@ -673,14 +698,25 @@ void PlayerWindow::on_music_ends() {
     std::cout << "WARNING: m_current_track is unitialized." << std::endl;
     m_current_track = 0;
   }
-  m_current_track++;
+
   auto listbox = dynamic_cast<Gtk::ListBox *>(
       m_playlist_scrolled_window->get_child()->get_first_child());
   int n_children = 0;
   if (listbox) {
     n_children = listbox->observe_children()->get_n_items();
   }
-
+  if (m_player.get_shuffle()) {
+    // Generate random number from 0 to n_children-1
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, n_children - 1);
+    int new_track_index = dis(gen);
+    while (m_current_track == new_track_index) {
+      new_track_index = dis(gen);
+    }
+    m_current_track = new_track_index;
+  } else // just go to the next
+    m_current_track++;
   if (m_current_track >= n_children) {
     // If we reached the end of the playlist, go back to the beginning
     // After creating loop button functionality need to update this piece of

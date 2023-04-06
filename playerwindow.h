@@ -27,6 +27,7 @@
 #include <gtkmm/togglebutton.h>
 #include <gtkmm/viewport.h>
 #include <mutex>
+#include <random>
 #include <sigc++/signal.h>
 #include <thread>
 #include <tuple>
