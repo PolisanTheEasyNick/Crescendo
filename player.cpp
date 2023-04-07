@@ -1935,14 +1935,14 @@ void Player::notify_observers_song_position_changed() {
 
 #ifdef SUPPORT_AUDIO_OUTPUT
 
-void Player::open_audio(const std::string &filename) {
+bool Player::open_audio(const std::string &filename) {
   Mix_FreeMusic(m_current_music);
   SF_INFO info = {0};
   SNDFILE *sndfile = sf_open(filename.c_str(), SFM_READ, &info);
   if (!sndfile) {
     std::cout << "Error opening file " << filename.c_str() << ": "
               << sf_strerror(sndfile) << std::endl;
-    return;
+    return false;
   }
 
   std::cout << "Audio file: " << filename.c_str() << std::endl;
@@ -1958,12 +1958,12 @@ void Player::open_audio(const std::string &filename) {
   if (Mix_OpenAudio(audio_rate, audio_format, audio_channels, audio_buffers) <
       0) {
     std::cout << "Failed to open audio: " << Mix_GetError() << std::endl;
-    return;
+    return false;
   }
   m_current_music = Mix_LoadMUS(filename.c_str());
   if (!m_current_music) {
     std::cout << "Mix_LoadMUS failed: " << Mix_GetError() << std::endl;
-    exit(EXIT_FAILURE);
+    return false;
   }
   m_song_title = Mix_GetMusicTitle(m_current_music);
   m_song_artist = Mix_GetMusicArtistTag(m_current_music);
@@ -1977,6 +1977,7 @@ void Player::open_audio(const std::string &filename) {
   notify_observers_song_length_changed();
   m_song_pos = 0;
   notify_observers_song_position_changed();
+  return true;
 }
 
 void Player::play_audio() {

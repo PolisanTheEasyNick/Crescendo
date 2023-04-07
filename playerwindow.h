@@ -14,6 +14,7 @@
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/cssprovider.h>
+#include <gtkmm/droptarget.h>
 #include <gtkmm/filedialog.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/gesturelongpress.h>
@@ -39,6 +40,7 @@ public:
   virtual ~PlayerWindow() {
     // Stop the position thread
     stop_position_thread();
+    delete m_playlist_scrolled_window;
   }
   void on_song_title_changed(const std::string &new_song) override {
     std::cout << "New song name PlayerWindow: " << new_song << std::endl;
@@ -135,6 +137,14 @@ private:
   void pause_position_thread();
   void resume_position_thread();
   void stop_position_thread();
+#ifdef SUPPORT_AUDIO_OUTPUT
+  gboolean on_signal_accept(const std::shared_ptr<Gdk::Drop> &);
+  gboolean on_signal_drop(const Glib::ValueBase &value, double, double);
+  void add_directory_files_to_playlist(const std::string &directory_path);
+  sigc::connection m_conn_accept;
+  sigc::connection m_conn_drop;
+  Glib::RefPtr<Gtk::DropTarget> m_drop_target;
+#endif
 };
 
 #endif // PLAYERWINDOW_H

@@ -142,7 +142,7 @@ public:
   void notify_observers_song_position_changed();
 
 #ifdef SUPPORT_AUDIO_OUTPUT
-  void open_audio(const std::string &filename);
+  bool open_audio(const std::string &filename);
   void play_audio();
   void stop_audio();
   void pause_audio();
