@@ -43,6 +43,7 @@ PlayerWindow::PlayerWindow() {
   m_prev_button.set_icon_name("media-skip-backward");
   m_playpause_button.set_icon_name("media-playback-start");
   m_next_button.set_icon_name("media-skip-forward");
+  m_loop_button.set_icon_name("media-repeat-none");
 
   m_control_buttons_box.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_control_buttons_box.set_halign(Gtk::Align::CENTER);
@@ -53,6 +54,7 @@ PlayerWindow::PlayerWindow() {
   m_control_buttons_box.append(m_prev_button);
   m_control_buttons_box.append(m_playpause_button);
   m_control_buttons_box.append(m_next_button);
+  m_control_buttons_box.append(m_loop_button);
 
   m_device_choose_button.set_icon_name("audio-headphones");
   m_player_choose_button.set_icon_name("multimedia-player");
@@ -159,6 +161,8 @@ PlayerWindow::PlayerWindow() {
       sigc::mem_fun(*this, &PlayerWindow::on_player_choose_clicked));
   m_device_choose_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_device_choose_clicked));
+  m_loop_button.signal_clicked().connect(
+      sigc::mem_fun(*this, &PlayerWindow::on_loop_clicked));
 
   m_main_grid.attach(m_current_pos_label, 0, 1);
   m_main_grid.attach(m_song_length_label, 2, 1);
@@ -257,12 +261,12 @@ PlayerWindow::PlayerWindow() {
             if (opened_file) {
               add_song_to_playlist(file->get_path().c_str());
             }
-            Mix_HookMusicFinished(&PlayerWindow::on_music_ends);
 
           } catch (Glib::Error err) {
           }
         });
   });
+  Mix_HookMusicFinished(&PlayerWindow::on_music_ends);
 
   m_drop_target =
       Gtk::DropTarget::create(Gio::File::get_type(), Gdk::DragAction::COPY);
@@ -647,6 +651,15 @@ void PlayerWindow::on_device_choosed(unsigned short device_sink_index) {
   m_player.set_output_device(device_sink_index);
 }
 
+void PlayerWindow::on_loop_clicked() {
+  int current_loop_status = m_player.get_repeat();
+  if (current_loop_status + 1 == 3) {
+    m_player.set_repeat(0);
+  } else {
+    m_player.set_repeat(current_loop_status + 1);
+  }
+}
+
 void PlayerWindow::check_buttons_features() {
   if (m_player.get_play_pause_method()) {
     m_playpause_button.set_sensitive(true);
@@ -823,6 +836,11 @@ void PlayerWindow::on_music_ends() {
   if (listbox) {
     n_children = listbox->observe_children()->get_n_items();
   }
+  std::cout << "Repeat: " << m_player.get_repeat() << std::endl;
+  if (m_player.get_repeat() == 2) {
+    m_player.play_audio();
+    return;
+  }
   if (m_player.get_shuffle()) {
     // Generate random number from 0 to n_children-1
     std::random_device rd;
@@ -833,24 +851,39 @@ void PlayerWindow::on_music_ends() {
       new_track_index = dis(gen);
     }
     m_current_track = new_track_index;
-  } else // just go to the next
+  } else { // just go to the next
     m_current_track++;
-  if (m_current_track >= n_children) {
-    // If we reached the end of the playlist, go back to the beginning
-    // After creating loop button functionality need to update this piece of
-    // code
-    m_current_track = 0;
-  }
-  m_activated_row->stop_highlight();
-  auto next_list_item =
-      dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(m_current_track));
-  m_activated_row = next_list_item;
-  m_activated_row->highlight();
-  if (m_player.open_audio(next_list_item->get_filename())) {
-    m_player.play_audio();
-  } else {
-    std::cout << "Can't open " << next_list_item->get_filename()
-              << " as audio file." << std::endl;
+    m_activated_row->stop_highlight();
+    auto next_list_item =
+        dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(m_current_track));
+    if (!next_list_item) {
+      if (m_player.get_repeat() == 1) { // if need to repeat playlist
+        m_current_track = 0;
+        auto first_list_item = dynamic_cast<PlaylistRow *>(
+            listbox->get_row_at_index(m_current_track));
+        if (first_list_item) {
+          m_activated_row = first_list_item;
+          m_activated_row->highlight();
+          if (m_player.open_audio(first_list_item->get_filename())) {
+            m_player.play_audio();
+          } else {
+            std::cout << "Can't open " << first_list_item->get_filename()
+                      << " as audio file." << std::endl;
+          }
+        }
+      } else { // end here
+        Mix_HaltMusic();
+      }
+    } else {
+      m_activated_row = next_list_item;
+      m_activated_row->highlight();
+      if (m_player.open_audio(next_list_item->get_filename())) {
+        m_player.play_audio();
+      } else {
+        std::cout << "Can't open " << next_list_item->get_filename()
+                  << " as audio file." << std::endl;
+      }
+    }
   }
 }
 #endif

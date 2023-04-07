@@ -99,6 +99,19 @@ public:
     m_lock_pos_changing = false;
   }
 
+  void on_loop_status_changed(const int &new_loop_status) override {
+    std::cout << "New loop status: " << new_loop_status << std::endl;
+    if (new_loop_status == -1 || new_loop_status == 0) { // none
+      m_loop_button.set_icon_name("media-repeat-none");
+    } else if (new_loop_status == 1) { // playlist
+      m_loop_button.set_icon_name("media-repeat-all");
+    } else if (new_loop_status == 2) { // song
+      m_loop_button.set_icon_name("media-repeat-single");
+    } else { // none
+      m_loop_button.set_icon_name("media-repeat-none");
+    }
+  }
+
 #ifdef SUPPORT_AUDIO_OUTPUT
   void add_song_to_playlist(const std::string &filename);
   static void on_music_ends();
@@ -108,12 +121,12 @@ protected:
   static Player m_player;
   void on_playpause_clicked(), on_prev_clicked(), on_next_clicked(),
       on_shuffle_clicked(), on_player_choose_clicked(),
-      on_device_choose_clicked();
+      on_device_choose_clicked(), on_loop_clicked();
   Gtk::Grid m_main_grid;
   Gtk::Box m_control_buttons_box, m_volume_and_player_box;
   Gtk::Button m_playpause_button, m_prev_button, m_next_button,
       m_shuffle_button, m_player_choose_button, m_device_choose_button,
-      m_add_song_to_playlist_button;
+      m_add_song_to_playlist_button, m_loop_button;
   Gtk::Label m_song_title_label, m_song_artist_label, m_current_pos_label,
       m_song_length_label;
   Gtk::Scale m_progress_bar_song_scale;
