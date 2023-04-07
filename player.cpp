@@ -350,6 +350,20 @@ bool Player::select_player(unsigned int new_id) {
     std::cout << "not found." << std::endl;
     m_is_metadata_prop = false;
   }
+
+  // Searching for LoopStatus property
+  std::cout << "Searching for LoopStatus property... ";
+  propertyNode =
+      iface_node.find_child_by_attribute("property", "name", "LoopStatus");
+  if (propertyNode) {
+    // Property found
+    std::cout << "found." << std::endl;
+    m_is_repeat_prop = true;
+  } else {
+    // Property not found
+    std::cout << "not found." << std::endl;
+    m_is_repeat_prop = false;
+  }
   start_listening_signals();
 #endif
   return true;
@@ -633,6 +647,115 @@ bool Player::set_shuffle(bool isShuffle) {
     return true;
   } catch (const sdbus::Error &e) {
     std::cout << "Error while trying to set Shuffle property: " << e.what()
+              << std::endl;
+    return false;
+  }
+#endif
+  return false;
+}
+
+int Player::get_repeat() {
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    return m_repeat;
+  }
+#endif
+  if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
+    std::cout << "Player not selected, can't continue." << std::endl;
+    return false;
+  }
+#ifdef HAVE_DBUS
+  if (!m_dbus_conn) {
+    std::cout << "Not connected to DBus, can't get Repeat status. Aborting."
+              << std::endl;
+    return false;
+  }
+  if (!m_is_repeat_prop) {
+    std::cerr << "This player does not compatible with Repeat status!"
+              << std::endl;
+    return false;
+  }
+  if (m_selected_player_id == -1) {
+    std::cout << "get_shuffle(): Player not selected, can't get Repeat status"
+              << std::endl;
+    return false;
+  }
+  try {
+    auto proxy = sdbus::createProxy(*m_dbus_conn.get(),
+                                    m_players[m_selected_player_id].second,
+                                    "/org/mpris/MediaPlayer2");
+    sdbus::Variant current_loop_v;
+    proxy->callMethod("Get")
+        .onInterface("org.freedesktop.DBus.Properties")
+        .withArguments("org.mpris.MediaPlayer2.Player", "LoopStatus")
+        .storeResultsTo(current_loop_v);
+    std::string current_shuffle = current_loop_v.get<std::string>();
+    int res = -1;
+    if (current_shuffle == "None") {
+      res = 0;
+    } else if (current_shuffle == "Playlist") {
+      res = 1;
+    } else if (current_shuffle == "Track") {
+      res = 2;
+    }
+    m_repeat = res;
+    return res;
+  } catch (const sdbus::Error &e) {
+    std::cout << "Error while trying to get LoopStatus property: " << e.what()
+              << std::endl;
+    return false;
+  }
+#endif
+  return false;
+}
+
+bool Player::set_repeat(int new_repeat = -1) {
+  if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
+    std::cout << "Player not selected, can't continue." << std::endl;
+    return false;
+  }
+#ifdef SUPPORT_AUDIO_OUTPUT
+  if (m_players[m_selected_player_id].first == "Local") {
+    m_repeat = new_repeat;
+    notify_observers_loop_status_changed();
+    return true;
+  }
+#endif
+#ifdef HAVE_DBUS
+  if (!m_dbus_conn) {
+    std::cout << "Not connected to DBus, can't set LoopStatus. Aborting."
+              << std::endl;
+    return false;
+  }
+  if (!m_is_repeat_prop) {
+    std::cerr << "This player does not compatible with LoopStatus property!"
+              << std::endl;
+    return false;
+  }
+  try {
+    auto proxy = sdbus::createProxy(*m_dbus_conn.get(),
+                                    m_players[m_selected_player_id].second,
+                                    "/org/mpris/MediaPlayer2");
+    std::string loop_to_set;
+    if (new_repeat == -1 || new_repeat == 0) {
+      loop_to_set = "None";
+    } else if (new_repeat == 1) {
+      loop_to_set = "Playlist";
+    } else if (new_repeat == 2) {
+      loop_to_set = "Track";
+    } else {
+      loop_to_set = "None";
+    }
+    proxy->callMethod("Set")
+        .onInterface("org.freedesktop.DBus.Properties")
+        .withArguments("org.mpris.MediaPlayer2.Player", "LoopStatus",
+                       sdbus::Variant(loop_to_set))
+        .dontExpectReply();
+    m_repeat = new_repeat;
+    notify_observers_loop_status_changed();
+    return true;
+  } catch (const sdbus::Error &e) {
+    std::cout << "Error while trying to set LoopStatus property: " << e.what()
               << std::endl;
     return false;
   }
@@ -1557,10 +1680,11 @@ void Player::start_listening_signals() {
 
 void Player::on_properties_changed(sdbus::Signal &signal) {
   std::map<std::string, int> property_map = {
-      {"Shuffle", 1},         // Shuffle
-      {"Metadata", 2},        // Changed song
-      {"Volume", 3},          // changed Volume
-      {"PlaybackStatus", 4}}; // paused or played
+      {"Shuffle", 1},        // Shuffle
+      {"Metadata", 2},       // Changed song
+      {"Volume", 3},         // changed Volume
+      {"PlaybackStatus", 4}, // paused or played
+      {"LoopStatus", 5}};
 
   // Handle the PropertiesChanged signal
   std::cout << "Prop changed" << std::endl;
@@ -1814,10 +1938,23 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
       notify_observers_is_playing_changed();
       return;
     }
+    case 5: { // LoopStatus
+      std::string loop = prop.second.get<std::string>();
+      std::cout << "LoopStatus property changed, new value: " << loop
+                << std::endl;
+      if (loop == "None")
+        m_repeat = 0;
+      else if (loop == "Playlist")
+        m_repeat = 1;
+      else if (loop == "Track")
+        m_repeat = 2;
+      else
+        m_repeat = -1;
+      notify_observers_loop_status_changed();
+    }
     }
   }
 }
-
 void Player::on_seeked(sdbus::Signal &signal) {
   m_song_pos = get_position();
   notify_observers_song_position_changed();
@@ -1830,7 +1967,6 @@ void Player::add_observer(PlayerObserver *observer) {
 }
 
 void Player::remove_observer(PlayerObserver *observer) {
-
   m_observers.erase(
       std::remove(m_observers.begin(), m_observers.end(), observer),
       m_observers.end());
@@ -1889,6 +2025,8 @@ void Player::get_song_data() {
   if (m_song_pos == -1)
     m_song_pos = 0;
   notify_observers_song_position_changed();
+  m_repeat = get_repeat();
+  notify_observers_loop_status_changed();
 }
 
 void Player::notify_observers_song_title_changed() {
@@ -1933,6 +2071,12 @@ void Player::notify_observers_song_position_changed() {
   }
 }
 
+void Player::notify_observers_loop_status_changed() {
+  for (auto observer : m_observers) {
+    observer->on_loop_status_changed(m_repeat);
+  }
+}
+
 #ifdef SUPPORT_AUDIO_OUTPUT
 
 bool Player::open_audio(const std::string &filename) {
@@ -1967,6 +2111,9 @@ bool Player::open_audio(const std::string &filename) {
   }
   m_song_title = Mix_GetMusicTitle(m_current_music);
   m_song_artist = Mix_GetMusicArtistTag(m_current_music);
+  if (m_song_title == "" && m_song_artist == "") {
+    m_song_title = filename;
+  }
   m_song_length = Mix_MusicDuration(m_current_music);
   m_song_length_str = Helper::get_instance().format_time(m_song_length);
   std::cout << "Title: " << m_song_title << std::endl;

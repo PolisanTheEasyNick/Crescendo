@@ -37,6 +37,7 @@ public:
   virtual void on_is_playing_changed(const bool &new_is_playing) = 0;
   virtual void on_song_volume_changed(const double &new_song_volume) = 0;
   virtual void on_song_position_changed(const uint64_t &new_song_pos) = 0;
+  virtual void on_loop_status_changed(const int &new_loop_status) = 0;
 };
 
 class Player {
@@ -64,7 +65,8 @@ private:
   bool m_is_volume_prop = false;
   bool m_is_playback_status_prop = false;
   bool m_is_metadata_prop = false;
-
+  bool m_is_repeat_prop = false;
+  int m_repeat = 0;
   std::string m_song_title, m_song_artist, m_song_length_str;
   uint64_t m_song_pos, m_song_length;
   bool m_is_shuffle, m_is_playing;
@@ -88,6 +90,8 @@ public:
   bool send_previous();
   bool get_shuffle();
   bool set_shuffle(bool isShuffle);
+  int get_repeat();
+  bool set_repeat(int new_repeat);
   int64_t get_position();
   std::string get_position_str();
   bool set_position(int64_t pos);
@@ -140,6 +144,7 @@ public:
   void notify_observers_is_playing_changed();
   void notify_observers_song_volume_changed();
   void notify_observers_song_position_changed();
+  void notify_observers_loop_status_changed();
 
 #ifdef SUPPORT_AUDIO_OUTPUT
   bool open_audio(const std::string &filename);
