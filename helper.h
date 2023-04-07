@@ -11,6 +11,12 @@ public:
     return instance;
   }
 
+  /**
+   * Formats time in human-readable format
+   *
+   * @param seconds Time in seconds which needs to formatting (type: int64_t)
+   * @return Formatted time (type: std::string)
+   */
   std::string format_time(int64_t seconds) {
     std::stringstream time_ss;
     int hours = seconds / 3600;

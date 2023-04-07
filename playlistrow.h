@@ -9,15 +9,20 @@
 
 class PlaylistRow : public Gtk::ListBoxRow {
 public:
-  // Define a signal for double click
-  sigc::signal<void, PlaylistRow *> signal_row_double_clicked();
-  const std::string m_filename;
-  PlaylistRow(const std::string &author, const std::string &title,
+  const std::string m_filename; // file name for row item
+  /**
+   * Constructor with parameters
+   * @param artist - song author (type: std::string)
+   * @param title - song title (type: std::string)
+   * @param duration - song duration in formated string (type: std::string)
+   * @param filename - song file path (type: std::string)
+   */
+  PlaylistRow(const std::string &artist, const std::string &title,
               const std::string &duration, const std::string &filename);
-  Gtk::Label *label_author_title;
-  void highlight();
-  void stop_highlight();
-  const std::string &get_filename() const;
+  Gtk::Label *label_artist_title;          // label with artist and title
+  void highlight();                        // highlight text with accent color
+  void stop_highlight();                   // disable highlight
+  const std::string &get_filename() const; // get file path
 };
 
 #endif // PLAYLISTROW_H

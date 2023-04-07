@@ -1,7 +1,7 @@
 #include "playerwindow.h"
 
+// define static variables
 Player PlayerWindow::m_player;
-
 Gtk::ScrolledWindow *PlayerWindow::m_playlist_scrolled_window = nullptr;
 PlaylistRow *PlayerWindow::m_activated_row = nullptr;
 
@@ -9,10 +9,13 @@ PlaylistRow *PlayerWindow::m_activated_row = nullptr;
 unsigned int PlayerWindow::m_current_track = -1;
 #endif
 
+/**
+ * Constructs a new PlayerWindow object.
+ */
 PlayerWindow::PlayerWindow() {
-  m_player.add_observer(this);
+  m_player.add_observer(this); // make this observer of Player
   m_playlist_scrolled_window = new Gtk::ScrolledWindow();
-  // setup current choosed player
+  // setup stock choosed player
   if (m_player.get_shuffle()) {
     m_shuffle_button.get_style_context()->add_class("shuffle-enabled");
   } else {
@@ -33,8 +36,7 @@ PlayerWindow::PlayerWindow() {
   set_default_icon_name("org.polisan.crescendo");
   set_title("Crescendo");
   set_default_size(500, 100);
-  set_child(m_main_grid);
-  // main_grid.set_row_homogeneous(true);
+  set_child(m_main_grid); // set child of window m_main_grid
   m_main_grid.set_column_homogeneous(true);
   m_main_grid.set_margin(15);
   m_main_grid.set_valign(Gtk::Align::FILL);
@@ -48,7 +50,6 @@ PlayerWindow::PlayerWindow() {
   m_control_buttons_box.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_control_buttons_box.set_halign(Gtk::Align::CENTER);
   m_control_buttons_box.set_valign(Gtk::Align::END);
-  // m_control_buttons_box.set_vexpand();
   m_control_buttons_box.set_spacing(5);
   m_control_buttons_box.append(m_shuffle_button);
   m_control_buttons_box.append(m_prev_button);
@@ -60,16 +61,16 @@ PlayerWindow::PlayerWindow() {
   m_player_choose_button.set_icon_name("multimedia-player");
 
   m_volume_bar_scale_button.set_orientation(Gtk::Orientation::VERTICAL);
-  m_volume_bar_scale_button.signal_value_changed().connect(
-      [this](double value) {
-        if (m_lock_volume_changing)
-          return;
-        m_player.set_volume(value);
-      });
+  m_volume_bar_scale_button.signal_value_changed()
+      .connect( // set signal for changing volume
+          [this](double value) {
+            if (m_lock_volume_changing)
+              return;
+            m_player.set_volume(value);
+          });
   m_volume_and_player_box.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_volume_and_player_box.set_halign(Gtk::Align::END);
   m_volume_and_player_box.set_valign(Gtk::Align::END);
-  // m_volume_and_player_box.set_vexpand();
   m_volume_and_player_box.append(m_player_choose_button);
   m_volume_and_player_box.append(m_device_choose_button);
   m_volume_and_player_box.append(m_volume_bar_scale_button);
@@ -78,11 +79,9 @@ PlayerWindow::PlayerWindow() {
   m_current_pos_label.set_label("00:00");
   m_current_pos_label.set_halign(Gtk::Align::START);
   m_current_pos_label.set_valign(Gtk::Align::CENTER);
-  // m_current_pos_label.set_vexpand();
 
   m_progress_bar_song_scale.set_halign(Gtk::Align::FILL);
   m_progress_bar_song_scale.set_valign(Gtk::Align::END);
-  // m_progress_bar_song_scale.set_vexpand();
   m_progress_bar_song_scale.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_progress_bar_song_scale.set_adjustment(Gtk::Adjustment::create(0.5, 0, 1));
   m_progress_bar_song_scale.set_margin_start(40);
@@ -91,41 +90,54 @@ PlayerWindow::PlayerWindow() {
   m_song_length_label.set_label("00:00");
   m_song_length_label.set_halign(Gtk::Align::END);
   m_song_length_label.set_valign(Gtk::Align::CENTER);
-  // m_song_length_label.set_vexpand();
 
-  auto controllers = m_progress_bar_song_scale.observe_controllers();
-  GListModel *model = controllers->gobj();
-  int n_controllers = g_list_model_get_n_items(model);
-  for (int i = 0; i < n_controllers; i++) {
-    GObject *controller_gobj = (GObject *)g_list_model_get_item(model, i);
-    auto click_controller = Glib::wrap(controller_gobj, false);
-    auto gesture_click =
-        dynamic_cast<Gtk::GestureClick *>(click_controller.get());
-    if (gesture_click) {
-      gesture_click->set_button(0);
-      gesture_click->signal_pressed().connect(
+  // Since GTK4 have bug https://gitlab.gnome.org/GNOME/gtk/-/issues/4939
+  // We will create our own signal for button release in created by stock
+  // GestureClick controller of Gtk::Scale
+  auto controllers = m_progress_bar_song_scale
+                         .observe_controllers(); // get controllers of progress
+                                                 // bar scale object
+  GListModel *model = controllers->gobj();       // get model
+  int n_controllers = g_list_model_get_n_items(model); // get count of children
+  for (int i = 0; i < n_controllers; i++) {            // go through all
+    GObject *controller_gobj =
+        (GObject *)g_list_model_get_item(model, i); // get i'th child
+    auto click_controller =
+        Glib::wrap(controller_gobj, false); // get click controller
+    auto gesture_click = dynamic_cast<Gtk::GestureClick *>(
+        click_controller.get());    // try to get Gtk::GestureClick
+    if (gesture_click) {            // if we found Gtk::GestureClick
+      gesture_click->set_button(0); // set button for main mouse mutton
+      gesture_click->signal_pressed().connect( // redefine singal pressed
           [this](int, double, double) { m_wait = true; });
-      gesture_click->signal_released().connect([this](int, double, double) {
-        if (m_lock_pos_changing)
-          return;
-        double position = m_progress_bar_song_scale.get_value();
-        uint64_t song_length = m_player.get_song_length();
-        if (m_player.get_current_player_name() == "Local") {
-          m_lock_pos_changing = true;
-          m_current_pos_label.set_label(
-              Helper::get_instance().format_time(position * song_length));
-          m_player.set_position(position * song_length);
-          m_lock_pos_changing = false;
-          m_wait = false;
-        } else {
-          m_lock_pos_changing = true;
-          m_current_pos_label.set_label(
-              Helper::get_instance().format_time(position * song_length));
-          m_player.set_position(position * song_length * 1000000);
-          m_lock_pos_changing = false;
-          m_wait = false;
-        }
-      });
+      gesture_click->signal_released().connect(
+          [this](int, double, double) { // redefine signal released
+            m_wait = true;
+            if (m_lock_pos_changing)
+              return;
+            double position = m_progress_bar_song_scale
+                                  .get_value(); // get current value of scale
+            uint64_t song_length = m_player.get_song_length(); // get song
+                                                               // length
+            if (m_player.get_current_player_name() ==
+                "Local") { // if local player
+              m_lock_pos_changing = true;
+              m_current_pos_label.set_label(Helper::get_instance().format_time(
+                  position * song_length)); // set label of new pos
+              m_player.set_position(position * song_length); // set new pos
+              m_lock_pos_changing = false;
+              m_wait = false;
+            } else {
+              m_lock_pos_changing = true;
+              m_current_pos_label.set_label(Helper::get_instance().format_time(
+                  position *
+                  song_length)); // if dbus player, set label with new pos
+              m_player.set_position(position * song_length *
+                                    1000000); // set new pos
+              m_lock_pos_changing = false;
+              m_wait = false;
+            }
+          });
     }
   }
   m_song_title_label.set_label("");
@@ -139,7 +151,6 @@ PlayerWindow::PlayerWindow() {
   m_song_title_list.append(m_song_title_label);
   m_song_title_list.append(m_song_artist_label);
   m_song_title_list.set_valign(Gtk::Align::END);
-  // m_song_title_list.set_vexpand();
   m_song_title_list.set_activate_on_single_click(false);
   m_song_title_list.set_selection_mode(Gtk::SelectionMode::NONE);
   m_song_title_label.set_can_target(false);
@@ -149,6 +160,7 @@ PlayerWindow::PlayerWindow() {
   m_song_artist_label.set_focusable(false);
   m_song_title_list.set_can_focus(false);
 
+  // connect out signals for buttons
   m_playpause_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_playpause_clicked));
   m_prev_button.signal_clicked().connect(
@@ -164,6 +176,7 @@ PlayerWindow::PlayerWindow() {
   m_loop_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_loop_clicked));
 
+  // attach all element to main grid
   m_main_grid.attach(m_current_pos_label, 0, 1);
   m_main_grid.attach(m_song_length_label, 2, 1);
   m_main_grid.attach(m_progress_bar_song_scale, 0, 1, 3, 1);
@@ -195,6 +208,7 @@ PlayerWindow::PlayerWindow() {
   // check if buttons accessible or not
   check_buttons_features();
 
+  // remove parents from popover when they closed
   m_player_choose_popover.signal_closed().connect(
       [this] { m_player_choose_popover.unparent(); });
   m_player_choose_popover.set_halign(Gtk::Align::FILL);
@@ -228,11 +242,12 @@ PlayerWindow::PlayerWindow() {
   m_playlist_listbox.set_show_separators();
 
 #ifdef SUPPORT_AUDIO_OUTPUT
+  // add signal when we choose song in playlist
   m_playlist_listbox.signal_row_activated().connect([this](
                                                         Gtk::ListBoxRow *row) {
     auto playlist_row = dynamic_cast<PlaylistRow *>(row);
     m_current_track = playlist_row->get_index();
-    if (!m_player.open_audio(playlist_row->get_filename())) {
+    if (!m_player.open_audio(playlist_row->get_filename())) { // open song
       std::cout << "Can't open file as audio: " << playlist_row->get_filename()
                 << std::endl;
     } else {
@@ -241,36 +256,42 @@ PlayerWindow::PlayerWindow() {
       }
       playlist_row->highlight();
       m_activated_row = playlist_row;
-      if (m_player.get_is_playing()) {
-        m_player.play_audio();
+      if (m_player.get_is_playing()) { // and if song already playing
+        m_player.play_audio();         // play new song
       }
     }
   });
 #endif
+  // add elements of playlist to main grid
   m_main_grid.attach(m_add_song_to_playlist_button, 0, 0);
   m_main_grid.attach(*m_playlist_scrolled_window, 0, 0, 3, 1);
 #ifdef SUPPORT_AUDIO_OUTPUT
-  m_add_song_to_playlist_button.signal_clicked().connect([this] {
-    auto file_dialog = Gtk::FileDialog::create();
-    file_dialog->open(
-        [file_dialog, this](Glib::RefPtr<Gio::AsyncResult> &result) -> void {
+  m_add_song_to_playlist_button.signal_clicked().connect(
+      [this] { // if we support local audio
+        auto file_dialog = Gtk::FileDialog::create(); // create file dialog when
+                                                      // button "add" clicked
+        file_dialog->open([file_dialog, this](
+                              Glib::RefPtr<Gio::AsyncResult> &result) -> void {
           try {
-            auto file = file_dialog->open_finish(result);
+            auto file = file_dialog->open_finish(
+                result); // get file from result of dialog
 
-            auto opened_file = Mix_LoadMUS(file->get_path().c_str());
-            if (opened_file) {
-              add_song_to_playlist(file->get_path().c_str());
+            auto opened_file =
+                Mix_LoadMUS(file->get_path().c_str()); // try to open it
+            if (opened_file) { // and if it was audio file
+              add_song_to_playlist(
+                  file->get_path().c_str()); // add it to playlist
             }
 
-          } catch (Glib::Error err) {
+          } catch (Glib::Error err) { // if user closed dialog
           }
         });
-  });
-  Mix_HookMusicFinished(&PlayerWindow::on_music_ends);
+      });
+  Mix_HookMusicFinished(
+      &PlayerWindow::on_music_ends); // add signal what to do when music ends
 
-  m_drop_target =
-      Gtk::DropTarget::create(Gio::File::get_type(), Gdk::DragAction::COPY);
-  // drop_target->set_actions(Gdk::DragAction::COPY);
+  m_drop_target = Gtk::DropTarget::create(
+      Gio::File::get_type(), Gdk::DragAction::COPY); // create drop_target
   m_conn_accept = m_drop_target->signal_accept().connect(
       [&](const std::shared_ptr<Gdk::Drop> &drop) -> gboolean {
         return on_signal_accept(drop);
@@ -281,15 +302,17 @@ PlayerWindow::PlayerWindow() {
         return on_signal_drop(value, x, y);
       },
       false);
-  add_controller(m_drop_target);
+  m_conn_leave =
+      m_drop_target->signal_leave().connect([&] { return on_signal_leave(); });
+  add_controller(m_drop_target); // add drop_target to main window
 
 #endif
 
-  if (m_player.get_current_player_name() != "Local") {
-    m_playlist_scrolled_window->hide();
+  if (m_player.get_current_player_name() != "Local") { // if player is not local
+    m_playlist_scrolled_window->hide(); // then hide button and playlist
     m_add_song_to_playlist_button.hide();
   } else {
-    set_default_size(500, 300);
+    set_default_size(500, 300); // if local, than set biggest size
   }
 
 #ifndef HAVE_PULSEAUDIO
@@ -302,12 +325,12 @@ PlayerWindow::PlayerWindow() {
       "You must install pulseaudio library for this button");
 #endif
 
-  if (m_player.get_current_player_name() != "Local") {
 #ifdef HAVE_DBUS
-    m_player.start_listening_signals();
-    m_player.get_song_data();
-#endif
+  if (m_player.get_current_player_name() != "Local") { // if player from DBus
+    m_player.start_listening_signals(); // start listening signals
+    m_player.get_song_data();           // and get current song data
   }
+#endif
 }
 
 void PlayerWindow::on_playpause_clicked() {
@@ -331,16 +354,17 @@ void PlayerWindow::on_playpause_clicked() {
     if (listbox) {
       int n_children = listbox->observe_children()->get_n_items();
       if (n_children != 0) {
-        auto listitem =
-            dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(0));
-        if (listitem) {
-          m_current_track = 0;
-          if (m_activated_row)
-            m_activated_row->stop_highlight();
-          m_activated_row = listitem;
-          m_activated_row->highlight();
-          if (m_player.open_audio(listitem->get_filename())) {
-            m_player.play_audio();
+        auto listitem = dynamic_cast<PlaylistRow *>(
+            listbox->get_row_at_index(0));     // getting first item in playlist
+        if (listitem) {                        // if first item is present
+          m_current_track = 0;                 // set id of current track to 0
+          if (m_activated_row)                 // if current activated
+            m_activated_row->stop_highlight(); // stop current highlight
+          m_activated_row = listitem;          // set activated to first
+          m_activated_row->highlight();        // set highlight to first
+          if (m_player.open_audio(
+                  listitem->get_filename())) { // open audio from first item
+            m_player.play_audio();             // play audio
           } else {
             std::cout << "Can't open " << listitem->get_filename()
                       << " as audio file." << std::endl;
@@ -357,43 +381,66 @@ void PlayerWindow::on_playpause_clicked() {
   }
 
 #endif
-  m_player.send_play_pause();
+  m_player.send_play_pause(); // if not local, then send signal to dbus
 }
 
 void PlayerWindow::on_prev_clicked() {
 #ifdef SUPPORT_AUDIO_OUTPUT
-  if (m_player.get_current_player_name() == "Local") {
+  if (m_player.get_current_player_name() == "Local") { // if local player
     std::cout << "Prev clicked" << std::endl;
     auto listbox = dynamic_cast<Gtk::ListBox *>(
         m_playlist_scrolled_window->get_child()->get_first_child());
-    if (listbox) {
-      int n_children = listbox->observe_children()->get_n_items();
+    if (listbox) { // if found listbox
+      int n_children =
+          listbox->observe_children()->get_n_items(); // get count of rows
       for (int i = 0; i < n_children; i++) {
-        auto listitem =
-            dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(i));
-        if (listitem == m_activated_row) {
+        auto listitem = dynamic_cast<PlaylistRow *>(
+            listbox->get_row_at_index(i)); // get ith row
+        if (listitem == m_activated_row) { // found current row
           std::cout << "Current song: " << listitem->get_filename()
                     << std::endl;
-          auto next_list_item =
-              dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(i - 1));
-          if (next_list_item) {
-            std::cout << "Prev song: " << next_list_item->get_filename()
+          auto prev_list_item = dynamic_cast<PlaylistRow *>(
+              listbox->get_row_at_index(i - 1)); // get previous row
+          if (prev_list_item) {                  // if found
+            std::cout << "Prev song: " << prev_list_item->get_filename()
                       << std::endl;
-            if (m_player.open_audio(next_list_item->get_filename())) {
-              if (m_player.get_is_playing())
-                m_player.play_audio();
-              if (m_activated_row)
+            if (m_player.open_audio(
+                    prev_list_item->get_filename())) { // then open previous
+              if (m_player.get_is_playing())           // if song was playing
+                m_player.play_audio();                 // play previous song
+              m_current_track = prev_list_item->get_index();
+              if (m_activated_row) // update highlightning
                 m_activated_row->stop_highlight();
-              m_activated_row = next_list_item;
+              m_activated_row = prev_list_item;
               m_activated_row->highlight();
               stop_flag = false;
               return;
             } else {
-              std::cout << "Can't open " << next_list_item->get_filename()
+              std::cout << "Can't open " << prev_list_item->get_filename()
                         << " as audio file." << std::endl;
             }
-          } else {
-            std::cout << "No prev song." << std::endl;
+          } else { // if no previous row
+            auto last_list_item = dynamic_cast<PlaylistRow *>(
+                listbox->get_row_at_index(n_children - 1)); // get last
+            if (last_list_item) {
+              std::cout << "Prev song: " << last_list_item->get_filename()
+                        << std::endl;
+              if (m_player.open_audio(
+                      last_list_item->get_filename())) { // open last
+                if (m_player.get_is_playing())
+                  m_player.play_audio(); // play last
+                if (m_activated_row)
+                  m_activated_row->stop_highlight();
+                m_current_track = last_list_item->get_index();
+                m_activated_row = last_list_item;
+                m_activated_row->highlight();
+                stop_flag = false;
+                return;
+              } else {
+                std::cout << "Can't open " << last_list_item->get_filename()
+                          << " as audio file." << std::endl;
+              }
+            }
             return;
           }
         }
@@ -408,65 +455,93 @@ void PlayerWindow::on_prev_clicked() {
 
 void PlayerWindow::on_next_clicked() {
 #ifdef SUPPORT_AUDIO_OUTPUT
-  if (m_player.get_current_player_name() == "Local") {
+  if (m_player.get_current_player_name() == "Local") { // if local player
     std::cout << "Next clicked" << std::endl;
-    auto listbox = dynamic_cast<Gtk::ListBox *>(
-        m_playlist_scrolled_window->get_child()->get_first_child());
+    auto listbox =
+        dynamic_cast<Gtk::ListBox *>(m_playlist_scrolled_window->get_child()
+                                         ->get_first_child()); // get listbox
     if (listbox) {
-      int n_children = listbox->observe_children()->get_n_items();
-      if (m_player.get_shuffle()) {
+      int n_children =
+          listbox->observe_children()->get_n_items(); // get count of rows
+      if (m_player.get_shuffle()) {                   // if shuffle enabled
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_int_distribution<> dis(0, n_children - 1);
         int new_track_index = dis(gen);
-        while (m_current_track == new_track_index) {
+        while (m_current_track == new_track_index) { // generate new song
           new_track_index = dis(gen);
         }
         m_current_track = new_track_index;
         auto listitem = dynamic_cast<PlaylistRow *>(
-            listbox->get_row_at_index(m_current_track));
-        if (m_player.get_is_playing())
-          m_player.play_audio();
-        if (m_activated_row)
+            listbox->get_row_at_index(m_current_track)); // get random song
+        if (m_activated_row)                             // update highlightning
           m_activated_row->stop_highlight();
         m_activated_row = listitem;
         m_activated_row->highlight();
-        if (m_player.open_audio(m_activated_row->get_filename())) {
+        if (m_player.open_audio(
+                m_activated_row->get_filename())) { // open new song
           if (m_player.get_is_playing())
-            m_player.play_audio();
+            m_player.play_audio(); // and play if played before
         } else {
           std::cout << "Can't open " << m_activated_row->get_filename()
                     << " as audio file." << std::endl;
         }
-      } else {
+      } else { // if shuffle disabled
         for (int i = 0; i < n_children; i++) {
           auto listitem =
               dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(i));
-          if (listitem == m_activated_row) {
+          if (listitem == m_activated_row) { // find current song row
             std::cout << "Current song: " << listitem->get_filename()
                       << std::endl;
-            auto next_list_item =
-                dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(i + 1));
-            if (next_list_item) {
+            auto next_list_item = dynamic_cast<PlaylistRow *>(
+                listbox->get_row_at_index(i + 1)); // go to next
+            if (m_player.get_repeat() == 1 &&
+                !next_list_item) { // repeat playlist if it's last song
+              next_list_item =
+                  dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(0));
+            }
+            if (next_list_item) { // if found next song
               std::cout << "Next song: " << next_list_item->get_filename()
                         << std::endl;
-              if (m_player.open_audio(next_list_item->get_filename())) {
+              if (m_player.open_audio(
+                      next_list_item->get_filename())) { // open it
                 if (m_player.get_is_playing())
-                  m_player.play_audio();
-                if (m_activated_row)
+                  m_player.play_audio(); // play
+                if (m_activated_row)     // change highlight
                   m_activated_row->stop_highlight();
                 m_activated_row = next_list_item;
                 m_activated_row->highlight();
-                m_current_track = m_activated_row->get_index();
+                m_current_track =
+                    m_activated_row->get_index(); // change m_current_track
                 stop_flag = false;
                 return;
               } else {
                 std::cout << "Can't open " << next_list_item->get_filename()
                           << " as audio file." << std::endl;
               }
-            } else {
-              std::cout << "No next song." << std::endl;
-              return;
+            } else { // if current song is last
+              auto last_list_item = dynamic_cast<PlaylistRow *>(
+                  listbox->get_row_at_index(0)); // go to the last
+              if (last_list_item) {
+                std::cout << "Next song: " << last_list_item->get_filename()
+                          << std::endl;
+                if (m_player.open_audio(
+                        last_list_item->get_filename())) { // open last
+                  if (m_player.get_is_playing())
+                    m_player.play_audio(); // play last
+                  if (m_activated_row)     // update highlightning
+                    m_activated_row->stop_highlight();
+                  m_activated_row = last_list_item;
+                  m_activated_row->highlight();
+                  m_current_track = m_activated_row->get_index();
+                  stop_flag = false;
+                  return;
+                } else {
+                  std::cout << "Can't open " << last_list_item->get_filename()
+                            << " as audio file." << std::endl;
+                }
+                return;
+              }
             }
           }
         }
@@ -480,44 +555,46 @@ void PlayerWindow::on_next_clicked() {
 }
 
 void PlayerWindow::on_shuffle_clicked() {
-  bool current_shuffle = m_player.get_shuffle();
-  m_player.set_shuffle(!current_shuffle);
+  bool current_shuffle = m_player.get_shuffle(); // get current shuffle
+  m_player.set_shuffle(!current_shuffle);        // set opposite
 }
 
 void PlayerWindow::on_player_choose_clicked() {
-  m_player_choose_popover.set_parent(m_player_choose_button);
+  m_player_choose_popover.set_parent(
+      m_player_choose_button); // set parent for popover
   Gtk::ListBox players_list;
   players_list.set_margin_bottom(5);
   players_list.set_halign(Gtk::Align::FILL);
-  std::string selected_player_interface = m_player.get_current_player_name();
+  std::string selected_player_name = m_player.get_current_player_name();
   auto players_vec = m_player.get_players();
 
-  for (const auto &pl : players_vec) {
-    auto player_choosing_button = Gtk::ToggleButton(pl.first);
-    if (pl.first == selected_player_interface) {
-      player_choosing_button.set_active();
+  for (const auto &pl : players_vec) { // for every player
+    auto player_choosing_button = Gtk::ToggleButton(pl.first); // create button
+    if (pl.first ==
+        selected_player_name) { // if button is button for selected player
+      player_choosing_button.set_active(); // set it active
     }
     player_choosing_button.set_has_frame(false);
     player_choosing_button.set_can_focus();
     player_choosing_button.set_halign(Gtk::Align::FILL);
-    Gtk::ListBoxRow row;
+    Gtk::ListBoxRow row; // create ListBoxRow
     row.set_selectable(false);
-    row.set_child(player_choosing_button);
+    row.set_child(player_choosing_button); // add button to id
     row.set_halign(Gtk::Align::FILL);
     row.set_valign(Gtk::Align::CENTER);
-    players_list.append(row);
+    players_list.append(row); // append row to listbox
   }
   Gtk::ToggleButton *first_button = dynamic_cast<Gtk::ToggleButton *>(
-      players_list.get_row_at_index(0)->get_child());
+      players_list.get_row_at_index(0)->get_child()); // get first button
   for (unsigned short i = 0; i < players_vec.size(); i++) {
     Gtk::ListBoxRow *row = players_list.get_row_at_index(i);
     Gtk::ToggleButton *button =
-        dynamic_cast<Gtk::ToggleButton *>(row->get_child());
-    if (button) {
-      if (button != first_button) {
-        button->set_group(*first_button);
+        dynamic_cast<Gtk::ToggleButton *>(row->get_child()); // get ith button
+    if (button) {                                            // if button
+      if (button != first_button) {       // if ith button not first
+        button->set_group(*first_button); // set group with first
       }
-      button->signal_clicked().connect(sigc::bind(
+      button->signal_clicked().connect(sigc::bind( // bind clicked
           sigc::mem_fun(*this, &PlayerWindow::on_player_choosed), i));
     }
   }
@@ -527,66 +604,78 @@ void PlayerWindow::on_player_choose_clicked() {
 }
 
 void PlayerWindow::on_player_choosed(unsigned short player_index) {
-  m_player_choose_popover.popdown();
-  m_player.select_player(player_index);
-  if (m_player.get_shuffle()) {
-    m_shuffle_button.get_style_context()->add_class("shuffle-enabled");
+  m_player_choose_popover.popdown();    // close popup
+  m_player.select_player(player_index); // select player
+  if (m_player.get_shuffle()) {         // if shuffle enabled
+    m_shuffle_button.get_style_context()->add_class(
+        "shuffle-enabled"); // add class
   } else {
-    m_shuffle_button.get_style_context()->remove_class("shuffle-enabled");
+    m_shuffle_button.get_style_context()->remove_class(
+        "shuffle-enabled"); // or remove if disabled
   }
-  check_buttons_features();
-  bool is_playing = m_player.get_playback_status();
-  if (!is_playing) {
-    m_playpause_button.set_icon_name("media-playback-start");
-  } else {
-    m_playpause_button.set_icon_name("media-playback-pause");
+  check_buttons_features(); // check what buttons must be accessible
+  bool is_playing = m_player.get_playback_status(); // get is playing
+  if (!is_playing) {                                // if not playing
+    m_playpause_button.set_icon_name(
+        "media-playback-start"); // set icon to start
+  } else {                       // if playing
+    m_playpause_button.set_icon_name(
+        "media-playback-pause"); // set icon to pause
   }
-  if (m_player.get_is_volume_prop()) {
-    std::cout << "Player changed, new player volume: ";
-    double volume = m_player.get_volume();
-    std::cout << volume << std::endl;
-    m_volume_bar_scale_button.set_value(volume);
+  if (m_player.get_is_volume_prop()) {     // if player have volume property
+    double volume = m_player.get_volume(); // get volume
+    m_volume_bar_scale_button.set_value(volume); // set volume
   }
 
-  m_player.get_song_data();
+  m_player.get_song_data(); // get song data, artist and so on
   if (m_player.get_current_player_name() != "Local") {
 #ifdef HAVE_DBUS
-    m_player.start_listening_signals();
+    m_player.start_listening_signals(); // if player not local, start listening
+                                        // DBus signals
 #endif
   }
 
 #ifdef SUPPORT_AUDIO_OUTPUT
-  if (m_player.get_current_player_name() == "Local") {
-    m_add_song_to_playlist_button.show();
-    m_playlist_scrolled_window->show();
+  if (m_player.get_current_player_name() == "Local") { // if local player
+    m_add_song_to_playlist_button.show(); // show button for adding to playlist
+    m_playlist_scrolled_window->show();   // show playlist
     m_main_grid.set_valign(Gtk::Align::FILL);
-    set_default_size(500, 300);
-    m_conn_accept = m_drop_target->signal_accept().connect(
-        [&](const std::shared_ptr<Gdk::Drop> &drop) -> gboolean {
-          return on_signal_accept(drop);
-        },
-        false);
+    set_default_size(500, 300); // set biggest size
+    m_conn_accept =
+        m_drop_target->signal_accept().connect( // add signal for accepting dnd
+            [&](const std::shared_ptr<Gdk::Drop> &drop) -> gboolean {
+              return on_signal_accept(drop);
+            },
+            false);
 
-    m_conn_drop = m_drop_target->signal_drop().connect(
-        [&](const Glib::ValueBase &value, double x, double y) {
-          return on_signal_drop(value, x, y);
-        },
-        false);
-    remove_controller(m_drop_target);
-  } else {
-    m_add_song_to_playlist_button.hide();
-    m_playlist_scrolled_window->hide();
+    m_conn_drop =
+        m_drop_target->signal_drop().connect( // add signal from dropping dnd
+            [&](const Glib::ValueBase &value, double x, double y) {
+              return on_signal_drop(value, x, y);
+            },
+            false);
+    m_conn_leave = m_drop_target->signal_leave().connect(
+        [&] { return on_signal_leave(); });
+    add_controller(m_drop_target); // add dnd controller to window
+
+  } else {                                // if player not local
+    m_add_song_to_playlist_button.hide(); // hide playlist add button
+    m_playlist_scrolled_window->hide();   // hide playlist
     m_main_grid.set_valign(Gtk::Align::END);
-    set_default_size(500, 100);
+    set_default_size(500, 100); // set smallest size
     if (m_conn_accept.connected()) {
       std::cout << "Disconnecting accept" << std::endl;
-      m_conn_accept.disconnect();
+      m_conn_accept.disconnect(); // disconnect from signal accept
     }
     if (m_conn_drop.connected()) {
       std::cout << "Disconnecting drop" << std::endl;
-      m_conn_drop.disconnect();
+      m_conn_drop.disconnect(); // disconnect from signal drop
     }
-    add_controller(m_drop_target);
+    if (m_conn_leave.connected()) {
+      std::cout << "Disconnecting leave" << std::endl;
+      m_conn_leave.disconnect(); // disconnect from signal leave
+    }
+    remove_controller(m_drop_target); // remove controller
   }
 #endif
 }
@@ -601,7 +690,8 @@ void PlayerWindow::on_device_choose_clicked() {
   return;
 #endif
   // Set up popover for device choose button
-  m_device_choose_popover.set_parent(m_device_choose_button);
+  m_device_choose_popover.set_parent(
+      m_device_choose_button); // set parent for popover
   Gtk::ListBox devices_list;
   devices_list.set_margin_bottom(5);
   devices_list.set_halign(Gtk::Align::FILL);
@@ -609,58 +699,62 @@ void PlayerWindow::on_device_choose_clicked() {
       m_player.get_current_device_sink_index();
   std::cout << "Player selected device: " << selected_device_sink_index
             << std::endl;
-  auto devices_vec = m_player.get_output_devices();
+  auto devices_vec = m_player.get_output_devices(); // get devices vector
 
-  for (const auto &dev : devices_vec) {
-    auto device_choosing_button = Gtk::ToggleButton(dev.first);
-    if (dev.second == selected_device_sink_index) {
-      device_choosing_button.set_active();
+  for (const auto &dev : devices_vec) { // for every device
+    auto device_choosing_button = Gtk::ToggleButton(dev.first); // create button
+    if (dev.second == selected_device_sink_index) { // if current button is for
+                                                    // current audio device
+      device_choosing_button.set_active();          // set it active
     }
     device_choosing_button.set_has_frame(false);
     device_choosing_button.set_can_focus();
     device_choosing_button.set_halign(Gtk::Align::FILL);
-    Gtk::ListBoxRow row;
+    Gtk::ListBoxRow row; // create row
     row.set_selectable(false);
-    row.set_child(device_choosing_button);
+    row.set_child(device_choosing_button); // add button to row
     row.set_halign(Gtk::Align::FILL);
     row.set_valign(Gtk::Align::CENTER);
-    devices_list.append(row);
+    devices_list.append(row); // append row with button to devices list
   }
   Gtk::ToggleButton *first_button = dynamic_cast<Gtk::ToggleButton *>(
-      devices_list.get_row_at_index(0)->get_child());
-  for (unsigned short i = 0; i < devices_vec.size(); i++) {
-    Gtk::ListBoxRow *row = devices_list.get_row_at_index(i);
+      devices_list.get_row_at_index(0)->get_child());        // get first button
+  for (unsigned short i = 0; i < devices_vec.size(); i++) {  // go through
+                                                             // buttons
+    Gtk::ListBoxRow *row = devices_list.get_row_at_index(i); // get ith row
     Gtk::ToggleButton *button =
-        dynamic_cast<Gtk::ToggleButton *>(row->get_child());
-    if (button) {
-      if (button != first_button) {
-        button->set_group(*first_button);
+        dynamic_cast<Gtk::ToggleButton *>(row->get_child()); // get ith button
+    if (button) {                         // if ith button is present
+      if (button != first_button) {       // if ith button not first
+        button->set_group(*first_button); // group it with first
       }
       button->signal_clicked().connect(
           sigc::bind(sigc::mem_fun(*this, &PlayerWindow::on_device_choosed),
-                     devices_vec[i].second));
+                     devices_vec[i].second)); // bind signal to button
     }
   }
 
-  m_device_choose_popover.set_child(devices_list);
-  m_device_choose_popover.popup();
+  m_device_choose_popover.set_child(
+      devices_list);               // set devices list child for popover
+  m_device_choose_popover.popup(); // show popover
 }
 
 void PlayerWindow::on_device_choosed(unsigned short device_sink_index) {
-  m_device_choose_popover.popdown();
-  m_player.set_output_device(device_sink_index);
+  m_device_choose_popover.popdown();             // close popover
+  m_player.set_output_device(device_sink_index); // change output device
 }
 
 void PlayerWindow::on_loop_clicked() {
-  int current_loop_status = m_player.get_repeat();
-  if (current_loop_status + 1 == 3) {
-    m_player.set_repeat(0);
+  int current_loop_status = m_player.get_repeat(); // get current loop status
+  if (current_loop_status + 1 == 3) {              // if it last status
+    m_player.set_repeat(0);                        // go to 0 status
   } else {
-    m_player.set_repeat(current_loop_status + 1);
+    m_player.set_repeat(current_loop_status + 1); // go to next status
   }
 }
 
 void PlayerWindow::check_buttons_features() {
+  // just set buttons sensitivitly whether button method is available in player
   if (m_player.get_play_pause_method()) {
     m_playpause_button.set_sensitive(true);
   } else {
@@ -686,10 +780,6 @@ void PlayerWindow::check_buttons_features() {
   } else {
     m_shuffle_button.set_sensitive(false);
   }
-
-  if (m_player.get_is_pos_prop()) {
-  } else {
-  }
   if (m_player.get_is_volume_prop()) {
     m_volume_bar_scale_button.set_sensitive(true);
   } else {
@@ -699,34 +789,37 @@ void PlayerWindow::check_buttons_features() {
 
 void PlayerWindow::update_position_thread() {
   std::cout << "Started tracking position" << std::endl;
-  std::cout << "Stop flag: " << stop_flag << std::endl;
   m_mutex.lock();
-  while (!stop_flag) {
-    {
-      if (m_wait) {
-        continue;
-      }
-      if (!m_player.get_playback_status()) {
-        std::cout << "Not playback_status, False, paused" << std::endl;
-        m_progress_bar_song_scale.set_value(0.0);
-        m_progress_bar_song_scale.queue_draw();
-        m_current_pos_label.set_label("00:00");
-        m_playpause_button.set_icon_name("media-play");
-        break;
-      }
-      double current_pos = m_player.get_position();
-      std::cout << "Current pos: " << current_pos << ", "
-                << m_player.get_position_str() << std::endl;
-      m_current_pos_label.set_label(m_player.get_position_str());
-      m_lock_pos_changing = true;
-      m_progress_bar_song_scale.set_value(current_pos /
-                                          m_player.get_song_length());
+  while (!stop_flag) { // while not signal to stop
+    while (m_wait) {
+      std::this_thread::sleep_for(
+          std::chrono::milliseconds(500)); // wait 0.5 sec
+    }
+    // if song end (if paused, then thread will be stopped by stop flag)
+    if (!m_player.get_playback_status()) {
+      m_progress_bar_song_scale.set_value(0.0);
       m_progress_bar_song_scale.queue_draw();
-      m_main_grid.queue_draw();
-      m_lock_pos_changing = false;
+      m_current_pos_label.set_label("00:00");
+      m_playpause_button.set_icon_name("media-play");
+      break;
+    }
+    double current_pos = m_player.get_position(); // get current pos
+    std::cout << "Current pos: " << current_pos << ", "
+              << m_player.get_position_str() << std::endl;
+    m_current_pos_label.set_label(
+        m_player.get_position_str()); // set label of current pos
+    m_lock_pos_changing = true; // lock sending signal about pos changed again
+    m_progress_bar_song_scale.set_value(
+        current_pos / m_player.get_song_length()); // set new value
+    m_progress_bar_song_scale.queue_draw();        // redraw progress_bar
+    m_main_grid.queue_draw();                      // redraw main grid
+    m_lock_pos_changing = false;                   // unlock
+    while (m_wait) {
+      std::this_thread::sleep_for(
+          std::chrono::milliseconds(500)); // wait 0.5 sec
     }
     m_mutex.unlock();
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500)); // wait 0.5 sec
     m_mutex.lock();
   }
   m_mutex.unlock();
@@ -738,49 +831,50 @@ void PlayerWindow::pause_position_thread() { m_wait = true; }
 
 void PlayerWindow::resume_position_thread() {
   m_wait = false;
-  if (!m_position_thread.joinable()) {
+  if (!m_position_thread.joinable()) { // if there is not thread
     stop_flag = false;
     m_position_thread =
-        std::thread(&PlayerWindow::update_position_thread, this);
+        std::thread(&PlayerWindow::update_position_thread, this); // create new
   } else {
     stop_flag = true;
-    m_position_thread.join();
+    m_position_thread.join(); // wait for thread to end
     stop_flag = false;
     m_position_thread =
-        std::thread(&PlayerWindow::update_position_thread, this);
+        std::thread(&PlayerWindow::update_position_thread, this); // create new
   }
 }
 
 void PlayerWindow::stop_position_thread() {
-  stop_flag = true;
+  stop_flag = true; // set stop flag
   if (m_position_thread.joinable()) {
-    m_position_thread.join();
+    m_position_thread.join(); // wait for end
   }
 }
 
 #ifdef SUPPORT_AUDIO_OUTPUT
 
 gboolean PlayerWindow::on_signal_accept(const std::shared_ptr<Gdk::Drop> &) {
-  set_cursor("wait");
+  set_cursor("wait"); // on accepting file just set mouse cursor to waiting
   return true;
 }
 
+// called when dropped file or folder
 gboolean PlayerWindow::on_signal_drop(const Glib::ValueBase &value, double,
                                       double) {
   GFile *file_gobj = static_cast<GFile *>(g_value_get_object(value.gobj()));
-  auto file_path = g_file_get_path(file_gobj);
-  if (file_path) {
-    auto file_info = Gio::File::create_for_path(file_path)->query_file_type(
-        Gio::FileQueryInfoFlags::NONE);
+  auto file_path = g_file_get_path(file_gobj); // get path of dropped file
+  if (file_path) {                             // if it exists
+    auto file_info = Gio::File::create_for_path(file_path)
+                         ->query_file_type( // create file info object
+                             Gio::FileQueryInfoFlags::NONE);
 
-    if (file_info == Gio::FileType::DIRECTORY) {
+    if (file_info == Gio::FileType::DIRECTORY) { // if dropped directory
       // Add all files recursively
       add_directory_files_to_playlist(file_path);
-      set_cursor();
+      set_cursor(); // set cursor to default after added files to playlist
       return true;
-    } else {
-      std::cout << "File: " << file_path << std::endl;
-      add_song_to_playlist(file_path);
+    } else {                           // if dropped file
+      add_song_to_playlist(file_path); // just add file
       set_cursor();
       return true;
     }
@@ -789,38 +883,42 @@ gboolean PlayerWindow::on_signal_drop(const Glib::ValueBase &value, double,
   return false;
 }
 
+void PlayerWindow::on_signal_leave() {
+  set_cursor(); // change cursor to default
+}
+
 void PlayerWindow::add_directory_files_to_playlist(
     const std::string &directory_path) {
-  auto file = Gio::File::create_for_path(directory_path);
-  auto enumerator = file->enumerate_children();
-  while (auto info = enumerator->next_file()) {
-    auto child_file = file->get_child(info->get_name());
-    auto child_info =
-        child_file->query_file_type(Gio::FileQueryInfoFlags::NONE);
-    if (child_info == Gio::FileType::DIRECTORY) {
-      add_directory_files_to_playlist(child_file->get_path());
-    } else {
-      auto child_path = child_file->get_path();
+  auto file = Gio::File::create_for_path(directory_path); // get file
+  auto enumerator = file->enumerate_children();           // if it have children
+  while (auto info = enumerator->next_file()) { // get while not got all
+    auto child_file = file->get_child(info->get_name()); // get child file
+    auto child_info = child_file->query_file_type(
+        Gio::FileQueryInfoFlags::NONE);           // get child info
+    if (child_info == Gio::FileType::DIRECTORY) { // if child info is directory
+      add_directory_files_to_playlist(
+          child_file->get_path());              // call the same function
+    } else {                                    // if file
+      auto child_path = child_file->get_path(); // get path
       std::cout << "File: " << child_path << std::endl;
-      add_song_to_playlist(child_path);
+      add_song_to_playlist(child_path); // and add this to playlist
     }
   }
 }
 
 void PlayerWindow::add_song_to_playlist(const std::string &filename) {
-
-  Mix_Music *music = Mix_LoadMUS(filename.c_str());
-  if (!music) {
+  Mix_Music *music = Mix_LoadMUS(filename.c_str()); // load music from filename
+  if (!music) {                                     // if cannot load
     std::cout << "Mix_LoadMUS failed: " << Mix_GetError() << std::endl;
     return;
   }
-  std::string song_title = Mix_GetMusicTitle(music);
-  std::string song_artist = Mix_GetMusicArtistTag(music);
-  std::string song_length =
-      Helper::get_instance().format_time(Mix_MusicDuration(music));
+  std::string song_title = Mix_GetMusicTitle(music);      // get title
+  std::string song_artist = Mix_GetMusicArtistTag(music); // get artist
+  std::string song_length = Helper::get_instance().format_time(
+      Mix_MusicDuration(music)); // get song length
 
   m_playlist_listbox.append(*Gtk::make_managed<PlaylistRow>(
-      song_title, song_artist, song_length, filename));
+      song_title, song_artist, song_length, filename)); // create row
 }
 
 void PlayerWindow::on_music_ends() {
@@ -830,59 +928,60 @@ void PlayerWindow::on_music_ends() {
     m_current_track = 0;
   }
 
-  auto listbox = dynamic_cast<Gtk::ListBox *>(
-      m_playlist_scrolled_window->get_child()->get_first_child());
+  auto listbox =
+      dynamic_cast<Gtk::ListBox *>(m_playlist_scrolled_window->get_child()
+                                       ->get_first_child()); // get playlist
   int n_children = 0;
   if (listbox) {
-    n_children = listbox->observe_children()->get_n_items();
+    n_children =
+        listbox->observe_children()->get_n_items(); // get size of playlist
   }
-  std::cout << "Repeat: " << m_player.get_repeat() << std::endl;
-  if (m_player.get_repeat() == 2) {
-    m_player.play_audio();
+  if (m_player.get_repeat() == 2) { // if repeat current song enabled
+    m_player.play_audio();          // just play again
     return;
   }
-  if (m_player.get_shuffle()) {
+  if (m_player.get_shuffle()) { // if shuffle
     // Generate random number from 0 to n_children-1
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, n_children - 1);
     int new_track_index = dis(gen);
-    while (m_current_track == new_track_index) {
+    while (m_current_track == new_track_index) { // generate new number
       new_track_index = dis(gen);
     }
-    m_current_track = new_track_index;
-  } else { // just go to the next
-    m_current_track++;
-    m_activated_row->stop_highlight();
-    auto next_list_item =
-        dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(m_current_track));
-    if (!next_list_item) {
-      if (m_player.get_repeat() == 1) { // if need to repeat playlist
-        m_current_track = 0;
-        auto first_list_item = dynamic_cast<PlaylistRow *>(
-            listbox->get_row_at_index(m_current_track));
-        if (first_list_item) {
-          m_activated_row = first_list_item;
-          m_activated_row->highlight();
-          if (m_player.open_audio(first_list_item->get_filename())) {
-            m_player.play_audio();
-          } else {
-            std::cout << "Can't open " << first_list_item->get_filename()
-                      << " as audio file." << std::endl;
-          }
+    m_current_track = new_track_index; // set index
+  } else {                             // if not shufflle
+    m_current_track++;                 // just go to the next
+  }
+  m_activated_row->stop_highlight();
+  auto next_list_item =
+      dynamic_cast<PlaylistRow *>(listbox->get_row_at_index(m_current_track));
+  if (!next_list_item) {              // if no next song
+    if (m_player.get_repeat() == 1) { // if need to repeat playlist
+      m_current_track = 0;            // go to the first
+      auto first_list_item = dynamic_cast<PlaylistRow *>(
+          listbox->get_row_at_index(m_current_track)); // get first
+      if (first_list_item) {                           // if first present
+        m_activated_row = first_list_item;
+        m_activated_row->highlight(); // highlight
+        if (m_player.open_audio(first_list_item->get_filename())) {
+          m_player.play_audio(); // and play
+        } else {
+          std::cout << "Can't open " << first_list_item->get_filename()
+                    << " as audio file." << std::endl;
         }
-      } else { // end here
-        Mix_HaltMusic();
       }
+    } else { // if no repeat playlist disabled, just turn off music
+      Mix_HaltMusic();
+    }
+  } else { // if there is next
+    m_activated_row = next_list_item;
+    m_activated_row->highlight(); // highlight
+    if (m_player.open_audio(next_list_item->get_filename())) {
+      m_player.play_audio(); // play
     } else {
-      m_activated_row = next_list_item;
-      m_activated_row->highlight();
-      if (m_player.open_audio(next_list_item->get_filename())) {
-        m_player.play_audio();
-      } else {
-        std::cout << "Can't open " << next_list_item->get_filename()
-                  << " as audio file." << std::endl;
-      }
+      std::cout << "Can't open " << next_list_item->get_filename()
+                << " as audio file." << std::endl;
     }
   }
 }
