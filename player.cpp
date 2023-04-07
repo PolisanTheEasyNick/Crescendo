@@ -2254,6 +2254,8 @@ bool Player::open_audio(const std::string &filename) {
     std::cout << "Mix_LoadMUS failed: " << Mix_GetError() << std::endl;
     return false;
   }
+  Mix_PlayMusic(m_current_music, 0);
+  Mix_PauseMusic();
   m_song_title = Mix_GetMusicTitle(m_current_music);      // get title
   m_song_artist = Mix_GetMusicArtistTag(m_current_music); // get artist
   if (m_song_title == "" && m_song_artist == "") {
