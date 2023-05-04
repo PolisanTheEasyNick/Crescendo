@@ -49,14 +49,29 @@ VolumeButton::VolumeButton() : Gtk::ScaleButton(0, 1, 0.1) {
               gesture_click->signal_released().connect(
                   [this, gtk_scale](int, double, double) {
                     // redraw on release
-                    gtk_scale->queue_draw();
+                    g_idle_add(
+                        [](gpointer data) -> gboolean {
+                          Gtk::Scale *gtk_scale =
+                              static_cast<Gtk::Scale *>(data);
+                          gtk_scale->queue_draw();
+                          return false;
+                        },
+                        gtk_scale);
                   });
             } else if (drag_controller) { // and find drag controller
               drag_controller->set_button(0);
               drag_controller->signal_drag_update().connect(
                   [this, gtk_scale](double, double) {
                     // and redraw on dragging
-                    gtk_scale->queue_draw();
+                    // redraw on release
+                    g_idle_add(
+                        [](gpointer data) -> gboolean {
+                          Gtk::Scale *gtk_scale =
+                              static_cast<Gtk::Scale *>(data);
+                          gtk_scale->queue_draw();
+                          return false;
+                        },
+                        gtk_scale);
                   });
             }
           }

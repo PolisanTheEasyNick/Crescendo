@@ -797,23 +797,37 @@ void PlayerWindow::update_position_thread() {
     }
     // if song end (if paused, then thread will be stopped by stop flag)
     if (!m_player.get_playback_status()) {
-      m_progress_bar_song_scale.set_value(0.0);
-      m_progress_bar_song_scale.queue_draw();
-      m_current_pos_label.set_label("00:00");
-      m_playpause_button.set_icon_name("media-play");
+      g_idle_add(
+          [](gpointer data) -> gboolean {
+            PlayerWindow *window = static_cast<PlayerWindow *>(data);
+            window->m_progress_bar_song_scale.set_value(0.0);
+            window->m_current_pos_label.set_label("00:00");
+            window->m_playpause_button.set_icon_name("media-play");
+            return false;
+          },
+          this);
       break;
     }
-    double current_pos = m_player.get_position(); // get current pos
-    std::cout << "Current pos: " << current_pos << ", "
-              << m_player.get_position_str() << std::endl;
-    m_current_pos_label.set_label(
-        m_player.get_position_str()); // set label of current pos
-    m_lock_pos_changing = true; // lock sending signal about pos changed again
-    m_progress_bar_song_scale.set_value(
-        current_pos / m_player.get_song_length()); // set new value
-    m_progress_bar_song_scale.queue_draw();        // redraw progress_bar
-    m_main_grid.queue_draw();                      // redraw main grid
-    m_lock_pos_changing = false;                   // unlock
+
+    g_idle_add(
+        [](gpointer data) -> gboolean {
+          PlayerWindow *window = static_cast<PlayerWindow *>(data);
+          double current_pos =
+              window->m_player.get_position(); // get current pos
+          std::cout << "Current pos: " << current_pos << ", "
+                    << m_player.get_position_str() << std::endl;
+          window->m_current_pos_label.set_label(
+              window->m_player.get_position_str()); // set label of current pos
+          window->m_lock_pos_changing =
+              true; // lock sending signal about pos changed again
+          window->m_progress_bar_song_scale.set_value(
+              current_pos /
+              window->m_player.get_song_length());        // set new value
+          window->m_progress_bar_song_scale.queue_draw(); // redraw progress_bar
+          window->m_lock_pos_changing = false;            // unlock
+          return false;
+        },
+        this);
     while (m_wait) {
       std::this_thread::sleep_for(
           std::chrono::milliseconds(500)); // wait 0.5 sec
@@ -833,14 +847,14 @@ void PlayerWindow::resume_position_thread() {
   m_wait = false;
   if (!m_position_thread.joinable()) { // if there is not thread
     stop_flag = false;
-    m_position_thread =
-        std::thread(&PlayerWindow::update_position_thread, this); // create new
+    m_position_thread = std::thread(&PlayerWindow::update_position_thread,
+                                    this); // create new
   } else {
     stop_flag = true;
     m_position_thread.join(); // wait for thread to end
     stop_flag = false;
-    m_position_thread =
-        std::thread(&PlayerWindow::update_position_thread, this); // create new
+    m_position_thread = std::thread(&PlayerWindow::update_position_thread,
+                                    this); // create new
   }
 }
 
