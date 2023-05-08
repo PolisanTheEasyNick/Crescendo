@@ -191,6 +191,7 @@ bool Player::select_player(unsigned int new_id) {
     m_is_volume_prop = true;
     m_is_playback_status_prop = true;
     m_is_metadata_prop = true;
+    m_is_repeat_prop = true;
 #ifdef HAVE_DBUS
     // if local player, we must stop listening signals from dbus
     stop_listening_signals();
@@ -1736,6 +1737,8 @@ bool Player::get_is_playback_status_prop() const {
 }
 
 bool Player::get_is_metadata_prop() const { return m_is_metadata_prop; }
+
+bool Player::get_is_repeat_prop() const { return m_is_repeat_prop; }
 
 unsigned int Player::get_count_of_players() const { return m_players.size(); }
 

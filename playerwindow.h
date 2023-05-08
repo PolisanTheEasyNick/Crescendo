@@ -155,13 +155,13 @@ public:
   void on_loop_status_changed(const int &new_loop_status) override {
     std::cout << "New loop status: " << new_loop_status << std::endl;
     if (new_loop_status == -1 || new_loop_status == 0) { // none
-      m_loop_button.set_icon_name("media-repeat-none");
+      m_repeat_button.set_icon_name("media-repeat-none");
     } else if (new_loop_status == 1) { // playlist
-      m_loop_button.set_icon_name("media-repeat-all");
+      m_repeat_button.set_icon_name("media-repeat-all");
     } else if (new_loop_status == 2) { // song
-      m_loop_button.set_icon_name("media-repeat-single");
+      m_repeat_button.set_icon_name("media-repeat-single");
     } else { // none
-      m_loop_button.set_icon_name("media-repeat-none");
+      m_repeat_button.set_icon_name("media-repeat-none");
     }
   }
 
@@ -190,7 +190,7 @@ protected:
       m_volume_and_player_box; // Box that contains buttons
   Gtk::Button m_playpause_button, m_prev_button, m_next_button,
       m_shuffle_button, m_player_choose_button, m_device_choose_button,
-      m_add_song_to_playlist_button, m_loop_button;
+      m_add_song_to_playlist_button, m_repeat_button;
   Gtk::Label m_song_title_label, m_song_artist_label, m_current_pos_label,
       m_song_length_label;
   Gtk::Scale m_progress_bar_song_scale; // Scale which contains progress bar

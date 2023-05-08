@@ -45,7 +45,7 @@ PlayerWindow::PlayerWindow() {
   m_prev_button.set_icon_name("media-skip-backward");
   m_playpause_button.set_icon_name("media-playback-start");
   m_next_button.set_icon_name("media-skip-forward");
-  m_loop_button.set_icon_name("media-repeat-none");
+  m_repeat_button.set_icon_name("media-repeat-none");
 
   m_control_buttons_box.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_control_buttons_box.set_halign(Gtk::Align::CENTER);
@@ -55,7 +55,7 @@ PlayerWindow::PlayerWindow() {
   m_control_buttons_box.append(m_prev_button);
   m_control_buttons_box.append(m_playpause_button);
   m_control_buttons_box.append(m_next_button);
-  m_control_buttons_box.append(m_loop_button);
+  m_control_buttons_box.append(m_repeat_button);
 
   m_device_choose_button.set_icon_name("audio-headphones");
   m_player_choose_button.set_icon_name("multimedia-player");
@@ -173,7 +173,7 @@ PlayerWindow::PlayerWindow() {
       sigc::mem_fun(*this, &PlayerWindow::on_player_choose_clicked));
   m_device_choose_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_device_choose_clicked));
-  m_loop_button.signal_clicked().connect(
+  m_repeat_button.signal_clicked().connect(
       sigc::mem_fun(*this, &PlayerWindow::on_loop_clicked));
 
   // attach all element to main grid
@@ -784,6 +784,11 @@ void PlayerWindow::check_buttons_features() {
     m_volume_bar_scale_button.set_sensitive(true);
   } else {
     m_volume_bar_scale_button.set_sensitive(false);
+  }
+  if (m_player.get_is_repeat_prop()) {
+    m_repeat_button.set_sensitive(true);
+  } else {
+    m_repeat_button.set_sensitive(false);
   }
 }
 

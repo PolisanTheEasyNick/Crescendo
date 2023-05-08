@@ -413,6 +413,12 @@ public:
    */
   bool get_is_metadata_prop() const;
   /**
+   * Gets whether current player supports Loop property
+   * @return true if player support Loop property, false otherwise (type:
+   * bool)
+   */
+  bool get_is_repeat_prop() const;
+  /**
    * Gets count of current available players
    * @return count of players (type: unsigned int)
    */
