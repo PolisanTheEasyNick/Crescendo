@@ -1,6 +1,6 @@
 # Maintainer: ob3r0n <ob3r0n@polisan.ddns.net>
 pkgname=crescendo-git
-pkgver=86371a9
+pkgver=59986e1
 pkgrel=1
 pkgdesc="Mediaplayer and Controller"
 arch=('x86_64')

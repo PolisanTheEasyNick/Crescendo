@@ -52,8 +52,17 @@ else()
 endif()
 
 install(TARGETS crescendo LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-if(NOT EXISTS $ENV{HOME}/.local/share/icons/hicolor/scalable/apps/org.polisan.crescendo.svg)
+if(NOT EXISTS /usr/share/icons/hicolor/scalable/apps/org.polisan.crescendo.svg)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/icon.svg"
-            DESTINATION $ENV{HOME}/.local/share/icons/hicolor/scalable/apps/
+            DESTINATION /usr/share/icons/hicolor/scalable/apps/
             RENAME "org.polisan.crescendo.svg")
 endif()
+
+# Generate the desktop file
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/crescendo.desktop.in
+               ${CMAKE_CURRENT_BINARY_DIR}/crescendo.desktop @ONLY)
+
+# Install the desktop file
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/crescendo.desktop
+        DESTINATION /usr/share/applications)
+

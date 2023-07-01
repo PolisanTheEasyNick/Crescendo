@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Crescendo
+Exec=@CMAKE_INSTALL_PREFIX@/bin/crescendo
+Icon=org.polisan.crescendo
+Terminal=false
+Type=Application
+Comment=Media Player and Controller
+Categories=Audio;Music;Player;AudioVideo;
+
