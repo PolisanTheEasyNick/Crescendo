@@ -68,6 +68,7 @@ PlayerWindow::PlayerWindow() {
               return;
             m_player.set_volume(value);
           });
+
   m_volume_and_player_box.set_orientation(Gtk::Orientation::HORIZONTAL);
   m_volume_and_player_box.set_halign(Gtk::Align::END);
   m_volume_and_player_box.set_valign(Gtk::Align::END);
@@ -83,7 +84,7 @@ PlayerWindow::PlayerWindow() {
   m_progress_bar_song_scale.set_halign(Gtk::Align::FILL);
   m_progress_bar_song_scale.set_valign(Gtk::Align::END);
   m_progress_bar_song_scale.set_orientation(Gtk::Orientation::HORIZONTAL);
-  m_progress_bar_song_scale.set_adjustment(Gtk::Adjustment::create(0.5, 0, 1));
+  m_progress_bar_song_scale.set_adjustment(Gtk::Adjustment::create(0.5, 0, 1, 0.1, 0.1));
   m_progress_bar_song_scale.set_margin_start(40);
   m_progress_bar_song_scale.set_margin_end(40);
 
@@ -109,16 +110,17 @@ PlayerWindow::PlayerWindow() {
     if (gesture_click) {            // if we found Gtk::GestureClick
       gesture_click->set_button(0); // set button for main mouse mutton
       gesture_click->signal_pressed().connect( // redefine singal pressed
-          [this](int, double, double) { m_wait = true; });
+          [this](int, double, double) { m_wait = true;
+          std::cout << "Signal pressed" << std::endl;});
       gesture_click->signal_released().connect(
           [this](int, double, double) { // redefine signal released
+              std::cout << "Signal released" << std::endl;
             m_wait = true;
             if (m_lock_pos_changing)
               return;
             double position = m_progress_bar_song_scale
                                   .get_value(); // get current value of scale
-            uint64_t song_length = m_player.get_song_length(); // get song
-                                                               // length
+            uint64_t song_length = m_player.get_song_length(); // get song length
             if (m_player.get_current_player_name() ==
                 "Local") { // if local player
               m_lock_pos_changing = true;
