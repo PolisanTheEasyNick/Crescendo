@@ -7,6 +7,7 @@
 #include <iostream>
 #include <list>
 #include <sstream>
+#include <thread>
 #include <vector>
 
 #include "helper.h"
@@ -205,6 +206,16 @@ class Player {
    * Whether to use player class with gui or not
    */
   bool m_with_gui;
+  /**
+   * Server thread
+   */
+  void server_thread();
+  std::thread m_server_thread;
+
+  // Server status
+  bool serverRunning = true;
+
+  static bool playerExists;
 
  public:
   /**
@@ -618,6 +629,16 @@ class Player {
    * @param music A pointer to the Mix_Music object to add to the playlist.
    */
   void add_to_playlist(Mix_Music *music);
+
+  /**
+   * Starts Socket server
+   */
+  void start_server();
+
+  /**
+   * Sends request to stop Socket server
+   */
+  void stop_server();
 #endif
 };
 #endif  // PLAYER_H

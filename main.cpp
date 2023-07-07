@@ -2,7 +2,10 @@
 #include <iostream>
 #include <string>
 
+static bool withGui = true;
+
 #include "gtkmm/application.h"
+#include "player.h"
 #include "playerwindow.h"
 
 bool appRunning = true;
@@ -16,8 +19,28 @@ void signalHandler(int signal) {
   }
 }
 
+void runNoGuiMode() {
+  Helper::get_instance().log("Starting in no GUI mode.");
+  Player player(false);
+  player.start_listening_signals();  // start listening signals
+  // Run the application within the while loop
+#ifdef HAVE_DBUS
+  Helper::get_instance().log("Current song: " + player.get_song_name() +
+                             " by " + player.get_song_author());
+#endif
+  while (appRunning) {
+#ifdef HAVE_DBUS
+    player.update_position_thread();
+#endif
+    if (!appRunning) {
+      player.stop_server();
+      break;
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
-  bool noGui = false;
+  std::cout << "Main first line" << std::endl;
   std::signal(SIGINT, signalHandler);
   std::signal(SIGTERM, signalHandler);
 
@@ -25,15 +48,17 @@ int main(int argc, char *argv[]) {
   for (int i = 1; i < argc; i++) {
     std::string arg = argv[i];
     if (arg == "--no-gui") {
-      noGui = true;
+      withGui = false;
       break;
+    } else {
+#define GUI
     }
   }
 
 #ifndef HAVE_DBUS
 #ifndef HAVE_PULSEAUDIO
 #ifndef SUPPORT_AUDIO_OUTPUT
-  if (noGui) {
+  if (!with_gui) {
     Helper::get_instance().log(
         "You can't use this player without sdbus-c++, PulseAudio, and "
         "the set of "
@@ -45,25 +70,9 @@ int main(int argc, char *argv[]) {
 #endif
 #endif
 
-  if (noGui) {
-    Helper::get_instance().log("Starting in no GUI mode.");
-    Player player(false);
-    player.start_listening_signals();  // start listening signals
-    // Run the application within the while loop
-#ifdef HAVE_DBUS
-    Helper::get_instance().log("Current song: " + player.get_song_name() +
-                               " by " + player.get_song_author());
-#endif
-    while (appRunning) {
-#ifdef HAVE_DBUS
-      std::thread position_check =
-          std::thread(&Player::update_position_thread, &player);
-      position_check.join();
-#endif
-      if (!appRunning) {
-        break;
-      }
-    }
+  if (!withGui) {
+    std::thread noGuiThread(runNoGuiMode);
+    if (noGuiThread.joinable()) noGuiThread.join();
   } else {
     // Run the GUI version of the application
     auto app = Gtk::Application::create("org.polisan.crescendo");

@@ -1,5 +1,11 @@
 #include "player.h"
 
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+
 #include <thread>
 
 /**
@@ -12,14 +18,176 @@ inline const char *const bool_to_string(bool b) { return b ? "true" : "false"; }
 
 #ifdef HAVE_DBUS
 void Player::update_position_thread() {
-  double current_pos = get_position();  // get current pos
-  Helper::get_instance().log("Current pos: " + std::to_string(current_pos) +
-                             ", " + get_position_str());
+  if (get_is_playing()) {
+    double current_pos = get_position();  // get current pos
+    Helper::get_instance().log("Current pos: " + std::to_string(current_pos) +
+                               ", " + get_position_str());
+  }
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // wait 1 sec
 }
 #endif
 
+void Player::server_thread() {
+  // Create a socket
+  int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+  if (serverSocket == -1) {
+    Helper::get_instance().log("SOCKET: Failed to create socket");
+    return;
+  }
+
+  // Set the socket to non-blocking mode
+  if (fcntl(serverSocket, F_SETFL, O_NONBLOCK) == -1) {
+    Helper::get_instance().log(
+        "SOCKET: Failed to set socket to non-blocking mode");
+    close(serverSocket);
+    return;
+  }
+
+  // Bind the socket to a specific IP address and port
+  sockaddr_in serverAddress{};
+  serverAddress.sin_family = AF_INET;
+  serverAddress.sin_addr.s_addr =
+      INADDR_ANY;                        // Listen on all network interfaces
+  serverAddress.sin_port = htons(4308);  // Port number
+
+  bool isBinded = false;
+  while (!isBinded) {
+    if (bind(serverSocket, reinterpret_cast<sockaddr *>(&serverAddress),
+             sizeof(serverAddress)) == -1) {
+      Helper::get_instance().log(
+          "SOCKET: Failed to bind socket, trying again after 10 seconds...");
+      // close(serverSocket);
+      std::this_thread::sleep_for(
+          std::chrono::seconds(10));  // Wait for 10 seconds
+    } else {
+      isBinded = true;  // Socket is successfully bound, exit the loop
+    }
+  }
+
+  // Listen for incoming connections
+  if (listen(serverSocket, 10) == -1) {
+    Helper::get_instance().log("SOCKET: Failed to listen on socket");
+    close(serverSocket);
+    return;
+  }
+
+  Helper::get_instance().log(
+      "SOCKET: Server started. Listening for connections...");
+
+  // Accept incoming connections and handle them
+  while (serverRunning) {
+    sockaddr_in clientAddress{};
+    socklen_t clientAddressLength = sizeof(clientAddress);
+
+    // Accept a client connection
+    int clientSocket =
+        accept(serverSocket, reinterpret_cast<sockaddr *>(&clientAddress),
+               &clientAddressLength);
+    if (clientSocket == -1) {
+      // Check if the error is due to non-blocking socket and no connection is
+      // pending
+      if (errno == EWOULDBLOCK || errno == EAGAIN) {
+        // Sleep for a short duration to avoid busy looping
+        usleep(1000);  // 1 millisecond
+        continue;
+      } else {
+        Helper::get_instance().log(
+            "SOCKET: Failed to accept client connection");
+        close(serverSocket);
+        return;
+      }
+    }
+
+    // Handle the client request
+    char buffer;
+
+    while (serverRunning) {
+      // Set up the timeout for recv()
+      struct timeval timeout;
+      timeout.tv_sec = 5;  // Set the timeout value in seconds
+      timeout.tv_usec = 0;
+
+      fd_set readSet;
+      FD_ZERO(&readSet);
+      FD_SET(clientSocket, &readSet);
+
+      int selectResult =
+          select(clientSocket + 1, &readSet, nullptr, nullptr, &timeout);
+      if (selectResult == -1) {
+        Helper::get_instance().log("SOCKET: Select failed");
+        close(clientSocket);
+        break;
+      } else if (selectResult == 0) {
+        Helper::get_instance().log(
+            "SOCKET: Timeout occurred. Closing the client connection.");
+        close(clientSocket);
+        break;
+      }
+
+      ssize_t bytesRead = recv(clientSocket, &buffer, 1, 0);
+      if (bytesRead == -1) {
+        Helper::get_instance().log("SOCKET: Failed to read from client socket");
+        close(clientSocket);
+        break;
+      } else if (bytesRead == 0) {
+        // Client disconnected
+        Helper::get_instance().log("SOCKET: Client disconnected");
+        close(clientSocket);
+        break;
+      }
+
+      // Process the received byte
+      int operation_code = static_cast<int>(buffer);
+      switch (operation_code) {
+        case 0: {
+          // std::cout << "Received byte: 0 (Testing connection)" << std::endl;
+          break;
+        }
+        case 1: {
+          Helper::get_instance().log("SOCKET: Received byte: 1 (Previous)");
+          send_previous();
+          break;
+        }
+        case 2: {
+          Helper::get_instance().log("SOCKET: Received byte: 2 (PlayPause)");
+          send_play_pause();
+          break;
+        }
+        case 3: {
+          Helper::get_instance().log("SOCKET: Received byte: 3 (Next)");
+          send_next();
+          break;
+        }
+        case 4: {
+          Helper::get_instance().log("SOCKET: Received byte: 4 (Get)");
+          // Send a string to the client
+          std::string message = get_position_str();
+          ssize_t bytesSent =
+              send(clientSocket, message.c_str(), message.size(), 0);
+          if (bytesSent == -1) {
+            std::cerr << "Failed to send message to the client" << std::endl;
+          } else {
+            std::cout << "Sent " << bytesSent << " bytes to the client"
+                      << std::endl;
+          }
+          break;
+        }
+        default: {
+          Helper::get_instance().log("SOCKET: Received unknown byte: " +
+                                     std::to_string(operation_code));
+          break;
+        }
+      }
+    }
+    close(clientSocket);
+  }
+
+  // Close the server socket
+  close(serverSocket);
+}
+
 Player::Player(bool with_gui) {
+  std::cout << "Player constructor" << std::endl;
   // init neccessary variables
   m_with_gui = with_gui;
   m_song_title = "";
@@ -68,6 +236,10 @@ Player::Player(bool with_gui) {
     exit(EXIT_FAILURE);
   }
 #endif
+
+#ifdef HAVE_DBUS
+  start_server();
+#endif
 }
 
 Player::~Player() {
@@ -114,12 +286,12 @@ std::vector<std::pair<std::string, std::string>> Player::get_players() {
     return m_players;
   }
 
-  Helper::get_instance().log("Start checking");
+  Helper::get_instance().log("Started checking for players");
   if (result_of_call.empty()) {  // if vector empty - stop parsing
     Helper::get_instance().log("Error getting reply.");
     return m_players;
   } else {
-    Helper::get_instance().log("Got reply");
+    Helper::get_instance().log("Got reply from DBus");
     int num_names = 0;
     for (const auto &name : result_of_call) {  // check every name
       if (strstr(name.c_str(), "org.mpris.MediaPlayer2.") ==
@@ -2384,5 +2556,16 @@ void Player::pause_audio() {
 }
 
 Mix_Music *Player::get_music() const { return m_current_music; }
+
+void Player::start_server() {
+  // start server
+  m_server_thread = std::thread(&Player::server_thread, this);
+  m_server_thread.detach();
+}
+
+void Player::stop_server() {
+  serverRunning = false;
+  if (m_server_thread.joinable()) m_server_thread.join();
+}
 
 #endif

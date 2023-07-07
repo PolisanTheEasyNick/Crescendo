@@ -1,9 +1,10 @@
 #include "playerwindow.h"
 
 // define static variables
-Player PlayerWindow::m_player;
+// Player PlayerWindow::m_player;
 Gtk::ScrolledWindow *PlayerWindow::m_playlist_scrolled_window = nullptr;
 PlaylistRow *PlayerWindow::m_activated_row = nullptr;
+PlayerWindow *PlayerWindow::s_instance = nullptr;
 
 #ifdef SUPPORT_AUDIO_OUTPUT
 unsigned int PlayerWindow::m_current_track = -1;
@@ -13,6 +14,7 @@ unsigned int PlayerWindow::m_current_track = -1;
  * Constructs a new PlayerWindow object.
  */
 PlayerWindow::PlayerWindow() {
+  s_instance = this;
   m_player.add_observer(this);  // make this observer of Player
   m_playlist_scrolled_window = new Gtk::ScrolledWindow();
   // setup stock choosed player
@@ -293,8 +295,9 @@ PlayerWindow::PlayerWindow() {
           }
         });
       });
-  Mix_HookMusicFinished(
-      &PlayerWindow::on_music_ends);  // add signal what to do when music ends
+  // Mix_HookMusicFinished(&PlayerWindow::on_music_ends);  // add signal what to
+  // do when music ends
+  Mix_HookMusicFinished(&PlayerWindow::on_music_ends_static);
 
   m_drop_target = Gtk::DropTarget::create(
       Gio::File::get_type(), Gdk::DragAction::COPY);  // create drop_target
@@ -832,7 +835,7 @@ void PlayerWindow::update_position_thread() {
               window->m_player.get_position();  // get current pos
           Helper::get_instance().log(
               "Current pos: " + std::to_string(current_pos) + ", " +
-              m_player.get_position_str());
+              window->m_player.get_position_str());
           window->m_current_pos_label.set_label(
               window->m_player.get_position_str());  // set label of current pos
           window->m_lock_pos_changing =
@@ -1019,5 +1022,9 @@ void PlayerWindow::on_music_ends() {
           "Can't open " + next_list_item->get_filename() + " as audio file.");
     }
   }
+}
+
+void PlayerWindow::on_music_ends_static() {
+  if (s_instance) s_instance->on_music_ends();
 }
 #endif

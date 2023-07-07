@@ -176,11 +176,12 @@ class PlayerWindow : public Gtk::ApplicationWindow, public PlayerObserver {
   /**
    * Callback function, which called after current music ends
    */
-  static void on_music_ends();
+  void on_music_ends();
+  static void on_music_ends_static();
 #endif
 
  protected:
-  static Player m_player;  // Player object
+  Player m_player;  // Player object
   /**
    * Callback function after button clicked
    */
@@ -256,6 +257,9 @@ class PlayerWindow : public Gtk::ApplicationWindow, public PlayerObserver {
   sigc::connection m_conn_drop;                 // connection for signal drop
   sigc::connection m_conn_leave;                // connection for signal leave
   Glib::RefPtr<Gtk::DropTarget> m_drop_target;  // drop target pointer
+  static PlayerWindow
+      *s_instance;  // Static member variable to hold the current instance
+
 #endif
 };
 
