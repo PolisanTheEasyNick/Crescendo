@@ -23,6 +23,33 @@ void Player::update_position_thread() {
     Helper::get_instance().log("Current pos: " + std::to_string(current_pos) +
                                ", " + get_position_str());
   }
+  if (clientConnected) {
+    std::string current_info = "";
+    auto metadata = get_metadata();
+    for (const auto &data : metadata) {
+      std::cout << "data: " << data.first << ":" << data.second << std::endl;
+      if (data.first == "mpris:artUrl") {
+        current_info += "art||" + data.second + "||";
+      } else if (data.first == "xesam:artist") {
+        current_info += "artist||" + data.second + "||";
+      } else if (data.first == "xesam:title") {
+        current_info += "title||" + data.second + "||";
+      }
+    }
+    current_info += "length||" + get_song_length_str() + "||";
+    current_info += "pos||" + get_position_str() + "||";
+    current_info += "playing||" + std::to_string(get_is_playing()) + "||";
+    current_info += "shuffle||" + std::to_string(get_shuffle()) + "||";
+    current_info += "repeat||" + std::to_string(get_repeat()) + "||";
+    ssize_t bytesSent =
+        send(clientSocket, current_info.c_str(), current_info.size(), 0);
+    if (bytesSent == -1) {
+      Helper::get_instance().log("Failed to send message to the client");
+    } else {
+      Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
+                                 " bytes to the client ");
+    }
+  }
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // wait 1 sec
 }
 #endif
@@ -80,7 +107,7 @@ void Player::server_thread() {
     socklen_t clientAddressLength = sizeof(clientAddress);
 
     // Accept a client connection
-    int clientSocket =
+    clientSocket =
         accept(serverSocket, reinterpret_cast<sockaddr *>(&clientAddress),
                &clientAddressLength);
     if (clientSocket == -1) {
@@ -94,10 +121,11 @@ void Player::server_thread() {
         Helper::get_instance().log(
             "SOCKET: Failed to accept client connection");
         close(serverSocket);
+        clientConnected = false;
         return;
       }
     }
-
+    clientConnected = true;
     // Handle the client request
     char buffer;
 
@@ -116,11 +144,13 @@ void Player::server_thread() {
       if (selectResult == -1) {
         Helper::get_instance().log("SOCKET: Select failed");
         close(clientSocket);
+        clientConnected = false;
         break;
       } else if (selectResult == 0) {
         Helper::get_instance().log(
             "SOCKET: Timeout occurred. Closing the client connection.");
         close(clientSocket);
+        clientConnected = false;
         break;
       }
 
@@ -128,11 +158,13 @@ void Player::server_thread() {
       if (bytesRead == -1) {
         Helper::get_instance().log("SOCKET: Failed to read from client socket");
         close(clientSocket);
+        clientConnected = false;
         break;
       } else if (bytesRead == 0) {
         // Client disconnected
         Helper::get_instance().log("SOCKET: Client disconnected");
         close(clientSocket);
+        clientConnected = false;
         break;
       }
 
@@ -160,15 +192,37 @@ void Player::server_thread() {
         }
         case 4: {
           Helper::get_instance().log("SOCKET: Received byte: 4 (Get)");
-          // Send a string to the client
-          std::string message = get_position_str();
-          ssize_t bytesSent =
-              send(clientSocket, message.c_str(), message.size(), 0);
-          if (bytesSent == -1) {
-            std::cerr << "Failed to send message to the client" << std::endl;
-          } else {
-            std::cout << "Sent " << bytesSent << " bytes to the client"
+          std::string result = "";
+          auto metadata = get_metadata();
+          for (const auto &data : metadata) {
+            std::cout << "data: " << data.first << ":" << data.second
                       << std::endl;
+            if (data.first == "mpris:artUrl") {
+              Helper::get_instance().log(
+                  "Found mpris:artUrl data while creating output for "
+                  "client...");
+              result += "art||" + data.second + "||";
+            } else if (data.first == "xesam:artist") {
+              Helper::get_instance().log(
+                  "Found xesam:artist data while creating output for "
+                  "client...");
+              result += "artist||" + data.second + "||";
+            } else if (data.first == "xesam:title") {
+              result += "title||" + data.second + "||";
+            }
+          }
+          result += "length||" + get_song_length_str() + "||";
+          result += "pos||" + get_position_str() + "||";
+          result += "playing||" + std::to_string(get_is_playing()) + "||";
+          result += "shuffle||" + std::to_string(get_shuffle()) + "||";
+          result += "repeat||" + std::to_string(get_repeat()) + "||";
+          ssize_t bytesSent =
+              send(clientSocket, result.c_str(), result.size(), 0);
+          if (bytesSent == -1) {
+            Helper::get_instance().log("Failed to send message to the client");
+          } else {
+            Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
+                                       " bytes to the client ");
           }
           break;
         }
@@ -180,10 +234,12 @@ void Player::server_thread() {
       }
     }
     close(clientSocket);
+    clientConnected = false;
   }
 
   // Close the server socket
   close(serverSocket);
+  clientConnected = false;
 }
 
 Player::Player(bool with_gui) {

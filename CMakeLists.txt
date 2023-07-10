@@ -90,3 +90,21 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/crescendo.desktop.in
 # Install the desktop file
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/crescendo.desktop
         DESTINATION /usr/share/applications)
+
+# Install the systemd service file
+if(EXISTS "/etc/systemd/user")
+  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/crescendo.service
+          DESTINATION /etc/systemd/user)
+  message(
+    STATUS "To start the Crescendo service, run: sudo systemctl start crescendo"
+  )
+  message(
+    STATUS
+      "To enable the Crescendo service at boot, run: sudo systemctl enable crescendo"
+  )
+else()
+  message(
+    WARNING
+      "The /etc/systemd/system directory does not exist. The Crescendo service file was not installed."
+  )
+endif()

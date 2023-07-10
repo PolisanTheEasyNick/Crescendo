@@ -215,7 +215,10 @@ class Player {
   // Server status
   bool serverRunning = true;
 
-  static bool playerExists;
+  // whether any client connected to server
+  bool clientConnected = false;
+
+  int clientSocket = -1;
 
  public:
   /**
