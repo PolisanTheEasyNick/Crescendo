@@ -10,11 +10,21 @@ PlayerWindow *PlayerWindow::s_instance = nullptr;
 unsigned int PlayerWindow::m_current_track = -1;
 #endif
 
+void PlayerWindow::signalHandler(int signal) {
+  if (signal == SIGINT || signal == SIGTERM) {
+    // Set the flag to false to stop the application
+    Helper::get_instance().log("Quitting from GUI...");
+    s_instance->close();
+  }
+}
+
 /**
  * Constructs a new PlayerWindow object.
  */
 PlayerWindow::PlayerWindow() {
   s_instance = this;
+  signal(SIGINT, signalHandler);
+  signal(SIGTERM, signalHandler);
   m_player.add_observer(this);  // make this observer of Player
   m_playlist_scrolled_window = new Gtk::ScrolledWindow();
   // setup stock choosed player
@@ -125,24 +135,7 @@ PlayerWindow::PlayerWindow() {
                                   .get_value();  // get current value of scale
             uint64_t song_length =
                 m_player.get_song_length();  // get song length
-            if (m_player.get_current_player_name() ==
-                "Local") {  // if local player
-              m_lock_pos_changing = true;
-              m_current_pos_label.set_label(Helper::get_instance().format_time(
-                  position * song_length));  // set label of new pos
-              m_player.set_position(position * song_length);  // set new pos
-              m_lock_pos_changing = false;
-              m_wait = false;
-            } else {
-              m_lock_pos_changing = true;
-              m_current_pos_label.set_label(Helper::get_instance().format_time(
-                  position *
-                  song_length));  // if dbus player, set label with new pos
-              m_player.set_position(position * song_length *
-                                    1000000);  // set new pos
-              m_lock_pos_changing = false;
-              m_wait = false;
-            }
+            m_player.set_position(position * song_length);
           });
     }
   }
@@ -846,6 +839,47 @@ void PlayerWindow::update_position_thread() {
           window->m_progress_bar_song_scale
               .queue_draw();                    // redraw progress_bar
           window->m_lock_pos_changing = false;  // unlock
+          if (!window->m_player.clients.empty()) {
+            std::string current_info = "";
+            auto metadata = window->m_player.get_metadata();
+            for (const auto &data : metadata) {
+              std::cout << "data: " << data.first << ":" << data.second
+                        << std::endl;
+              if (data.first == "mpris:artUrl") {
+                current_info += "art||" + data.second + "||";
+              } else if (data.first == "xesam:artist") {
+                current_info += "artist||" + data.second + "||";
+              } else if (data.first == "xesam:title") {
+                current_info += "title||" + data.second + "||";
+              }
+            }
+            current_info +=
+                "length||" + window->m_player.get_song_length_str() + "||";
+            current_info +=
+                "pos||" + window->m_player.get_position_str() + "||";
+            current_info += "playing||" +
+                            std::to_string(window->m_player.get_is_playing()) +
+                            "||";
+            current_info += "shuffle||" +
+                            std::to_string(window->m_player.get_shuffle()) +
+                            "||";
+            current_info += "repeat||" +
+                            std::to_string(window->m_player.get_repeat()) +
+                            "||";
+            for (int client : window->m_player.clients) {
+              ssize_t bytesSent =
+                  send(client, current_info.c_str(), current_info.size(), 0);
+              if (bytesSent == -1) {
+                Helper::get_instance().log(
+                    "Failed to send message to the client " +
+                    std::to_string(client));
+              } else {
+                Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
+                                           " bytes to the client " +
+                                           std::to_string(client));
+              }
+            }
+          }
           return false;
         },
         this);

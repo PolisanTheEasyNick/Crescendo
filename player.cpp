@@ -23,33 +23,7 @@ void Player::update_position_thread() {
     Helper::get_instance().log("Current pos: " + std::to_string(current_pos) +
                                ", " + get_position_str());
   }
-  if (clientConnected) {
-    std::string current_info = "";
-    auto metadata = get_metadata();
-    for (const auto &data : metadata) {
-      std::cout << "data: " << data.first << ":" << data.second << std::endl;
-      if (data.first == "mpris:artUrl") {
-        current_info += "art||" + data.second + "||";
-      } else if (data.first == "xesam:artist") {
-        current_info += "artist||" + data.second + "||";
-      } else if (data.first == "xesam:title") {
-        current_info += "title||" + data.second + "||";
-      }
-    }
-    current_info += "length||" + get_song_length_str() + "||";
-    current_info += "pos||" + get_position_str() + "||";
-    current_info += "playing||" + std::to_string(get_is_playing()) + "||";
-    current_info += "shuffle||" + std::to_string(get_shuffle()) + "||";
-    current_info += "repeat||" + std::to_string(get_repeat()) + "||";
-    ssize_t bytesSent =
-        send(clientSocket, current_info.c_str(), current_info.size(), 0);
-    if (bytesSent == -1) {
-      Helper::get_instance().log("Failed to send message to the client");
-    } else {
-      Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
-                                 " bytes to the client ");
-    }
-  }
+  send_info_to_clients();
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // wait 1 sec
 }
 #endif
@@ -105,9 +79,9 @@ void Player::server_thread() {
   while (serverRunning) {
     sockaddr_in clientAddress{};
     socklen_t clientAddressLength = sizeof(clientAddress);
-
+    int received;
     // Accept a client connection
-    clientSocket =
+    int clientSocket =
         accept(serverSocket, reinterpret_cast<sockaddr *>(&clientAddress),
                &clientAddressLength);
     if (clientSocket == -1) {
@@ -121,14 +95,14 @@ void Player::server_thread() {
         Helper::get_instance().log(
             "SOCKET: Failed to accept client connection");
         close(serverSocket);
-        clientConnected = false;
+        clients.erase(std::remove(clients.begin(), clients.end(), clientSocket),
+                      clients.end());
         return;
       }
     }
-    clientConnected = true;
     // Handle the client request
-    char buffer;
 
+    clients.push_back(clientSocket);
     while (serverRunning) {
       // Set up the timeout for recv()
       struct timeval timeout;
@@ -144,106 +118,166 @@ void Player::server_thread() {
       if (selectResult == -1) {
         Helper::get_instance().log("SOCKET: Select failed");
         close(clientSocket);
-        clientConnected = false;
+        clients.erase(std::remove(clients.begin(), clients.end(), clientSocket),
+                      clients.end());
         break;
       } else if (selectResult == 0) {
         Helper::get_instance().log(
             "SOCKET: Timeout occurred. Closing the client connection.");
         close(clientSocket);
-        clientConnected = false;
+        std::cout << "Clients before: " << std::endl;
+        for (const auto &client : clients) {
+          std::cout << client << std::endl;
+        }
+        clients.erase(std::remove(clients.begin(), clients.end(), clientSocket),
+                      clients.end());
+        std::cout << "Clients after: " << std::endl;
+        for (const auto &client : clients) {
+          std::cout << client << std::endl;
+        }
         break;
       }
 
-      ssize_t bytesRead = recv(clientSocket, &buffer, 1, 0);
+      ssize_t bytesRead = recv(clientSocket, &received, sizeof(received), 0);
+      std::cout << "Received bytes:  " << bytesRead << std::endl;
       if (bytesRead == -1) {
         Helper::get_instance().log("SOCKET: Failed to read from client socket");
         close(clientSocket);
-        clientConnected = false;
+        clients.erase(std::remove(clients.begin(), clients.end(), clientSocket),
+                      clients.end());
         break;
       } else if (bytesRead == 0) {
         // Client disconnected
         Helper::get_instance().log("SOCKET: Client disconnected");
         close(clientSocket);
-        clientConnected = false;
+        clients.erase(std::remove(clients.begin(), clients.end(), clientSocket),
+                      clients.end());
         break;
-      }
-
-      // Process the received byte
-      int operation_code = static_cast<int>(buffer);
-      switch (operation_code) {
-        case 0: {
-          // std::cout << "Received byte: 0 (Testing connection)" << std::endl;
-          break;
-        }
-        case 1: {
-          Helper::get_instance().log("SOCKET: Received byte: 1 (Previous)");
-          send_previous();
-          break;
-        }
-        case 2: {
-          Helper::get_instance().log("SOCKET: Received byte: 2 (PlayPause)");
-          send_play_pause();
-          break;
-        }
-        case 3: {
-          Helper::get_instance().log("SOCKET: Received byte: 3 (Next)");
-          send_next();
-          break;
-        }
-        case 4: {
-          Helper::get_instance().log("SOCKET: Received byte: 4 (Get)");
-          std::string result = "";
-          auto metadata = get_metadata();
-          for (const auto &data : metadata) {
-            std::cout << "data: " << data.first << ":" << data.second
-                      << std::endl;
-            if (data.first == "mpris:artUrl") {
-              Helper::get_instance().log(
-                  "Found mpris:artUrl data while creating output for "
-                  "client...");
-              result += "art||" + data.second + "||";
-            } else if (data.first == "xesam:artist") {
-              Helper::get_instance().log(
-                  "Found xesam:artist data while creating output for "
-                  "client...");
-              result += "artist||" + data.second + "||";
-            } else if (data.first == "xesam:title") {
-              result += "title||" + data.second + "||";
+      } else if (bytesRead == sizeof(received)) {
+        // Process the received byte
+        // int received = ntohl(buffer);
+        // received = ntohl(received);
+        if (received != 0) std::cout << "Received: " << received << std::endl;
+        int operation_code = Helper::get_instance().firstDigit(received);
+        switch (operation_code) {
+          case 0: {
+            // std::cout << "Received byte: 0 (Testing connection)" <<
+            // std::endl;
+            break;
+          }
+          case 1: {
+            Helper::get_instance().log("SOCKET: Received byte: 1 (Previous)");
+            send_previous();
+            break;
+          }
+          case 2: {
+            Helper::get_instance().log("SOCKET: Received byte: 2 (PlayPause)");
+            send_play_pause();
+            break;
+          }
+          case 3: {
+            Helper::get_instance().log("SOCKET: Received byte: 3 (Next)");
+            send_next();
+            break;
+          }
+          case 4: {
+            Helper::get_instance().log("SOCKET: Received byte: 4 (Get)");
+            send_info_to_clients();
+            break;
+          }
+          case 5: {
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 5 (Toggle Shuffle)");
+            set_shuffle(!get_shuffle());
+            break;
+          }
+          case 6: {
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 6 (Toggle Repeat)");
+            int current_loop_status = get_repeat();  // get current loop status
+            if (current_loop_status + 1 == 3) {      // if it last status
+              set_repeat(0);                         // go to 0 status
+            } else {
+              set_repeat(current_loop_status + 1);  // go to next status
             }
+            break;
           }
-          result += "length||" + get_song_length_str() + "||";
-          result += "pos||" + get_position_str() + "||";
-          result += "playing||" + std::to_string(get_is_playing()) + "||";
-          result += "shuffle||" + std::to_string(get_shuffle()) + "||";
-          result += "repeat||" + std::to_string(get_repeat()) + "||";
-          ssize_t bytesSent =
-              send(clientSocket, result.c_str(), result.size(), 0);
-          if (bytesSent == -1) {
-            Helper::get_instance().log("Failed to send message to the client");
-          } else {
-            Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
-                                       " bytes to the client ");
+          case 7: {
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 7 (Set position)");
+            std::string numberStr = std::to_string(received);
+            std::string digits = numberStr.substr(1);
+            int newPos = std::stoi(digits);
+            Helper::get_instance().log("Fetched position " + digits);
+            set_position(newPos);
+            break;
           }
-          break;
-        }
-        default: {
-          Helper::get_instance().log("SOCKET: Received unknown byte: " +
-                                     std::to_string(operation_code));
-          break;
+          default: {
+            Helper::get_instance().log("SOCKET: Received unknown byte: " +
+                                       std::to_string(operation_code));
+            break;
+          }
         }
       }
     }
     close(clientSocket);
-    clientConnected = false;
+    clients.erase(std::remove(clients.begin(), clients.end(), clientSocket),
+                  clients.end());
   }
 
   // Close the server socket
   close(serverSocket);
-  clientConnected = false;
+}
+
+void Player::send_info_to_clients() {
+  if (!clients.empty()) {
+    std::string current_info = "";
+    auto metadata = get_metadata();
+    for (const auto &data : metadata) {
+      if (data.first == "mpris:artUrl") {
+        if (data.second != "")
+          current_info += "art||" + data.second + "||";
+        else
+          current_info += "art||-||";
+      } else if (data.first == "xesam:artist") {
+        if (data.second != "")
+          current_info += "artist||" + data.second + "||";
+        else
+          current_info += "artist||-||";
+      } else if (data.first == "xesam:title") {
+        if (data.second != "")
+          current_info += "title||" + data.second + "||";
+        else
+          current_info += "title||-||";
+      }
+    }
+    std::string length = get_song_length_str();
+    if (length == "") length = "0:00";
+    std::string position = get_position_str();
+    if (position == "") position = "0:00";
+
+    current_info += "length||" + length + "||";
+    current_info += "pos||" + position + "||";
+    current_info += "playing||" + std::to_string(get_is_playing()) + "||";
+    current_info += "shuffle||" + std::to_string(get_shuffle()) + "||";
+    current_info += "repeat||" + std::to_string(get_repeat()) + "||";
+    for (int client : clients) {
+      ssize_t bytesSent =
+          send(client, current_info.c_str(), current_info.size(), 0);
+
+      if (bytesSent == -1) {
+        Helper::get_instance().log("Failed to send message to the client " +
+                                   std::to_string(client));
+      } else {
+        Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
+                                   " bytes to the client " +
+                                   std::to_string(client));
+      }
+    }
+  }
 }
 
 Player::Player(bool with_gui) {
-  std::cout << "Player constructor" << std::endl;
   // init neccessary variables
   m_with_gui = with_gui;
   m_song_title = "";
@@ -649,6 +683,7 @@ bool Player::select_player(unsigned int new_id) {
     Helper::get_instance().log("not found.", true, false);
     m_is_repeat_prop = false;
   }
+  get_song_data();
   start_listening_signals();
 #endif
   return true;
@@ -1076,8 +1111,12 @@ int64_t Player::get_position() {
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    return Mix_GetMusicPosition(
-        m_current_music);  // if local player then get current position from SDL
+    // if local player then get current position from SDL
+    int64_t pos = Mix_GetMusicPosition(m_current_music);
+    if (pos > 0)
+      return pos;
+    else
+      return 0;
   }
 #endif
 #ifdef HAVE_DBUS
@@ -1105,6 +1144,7 @@ int64_t Player::get_position() {
                        "Position")  // get Position property
         .storeResultsTo(position_v);
     position = position_v.get<int64_t>();
+    if (position < 0) return 0;
     return position / 1000000;  // convert it into seconds and return
   } catch (const sdbus::Error &e) {
     Helper::get_instance().log(
@@ -1134,6 +1174,10 @@ bool Player::set_position(int64_t pos) {
   }
 #endif
 #ifdef HAVE_DBUS
+  if (get_current_player_name() != "Local") {  // if not local player
+    pos *= 1000000;
+  }
+
   if (!m_dbus_conn) {
     Helper::get_instance().log(
         "Not connected to DBus, can't set Position. Aborting.");
@@ -1187,7 +1231,10 @@ uint64_t Player::get_song_length() {
           "Local") {        // if player is not local
         length /= 1000000;  // then convert to seconds
       }
-      return length;  // and return length
+      if (length > 0)
+        return length;  // and return length
+      else
+        return 0;
     }
   }
 
@@ -2472,48 +2519,56 @@ void Player::notify_observers_song_title_changed() {
   for (auto observer : m_observers) {
     observer->on_song_title_changed(m_song_title);
   }
+  send_info_to_clients();
 }
 
 void Player::notify_observers_song_artist_changed() {
   for (auto observer : m_observers) {
     observer->on_song_artist_changed(m_song_artist);
   }
+  send_info_to_clients();
 }
 
 void Player::notify_observers_song_length_changed() {
   for (auto observer : m_observers) {
     observer->on_song_length_changed(m_song_length_str);
   }
+  send_info_to_clients();
 }
 
 void Player::notify_observers_is_shuffle_changed() {
   for (auto observer : m_observers) {
     observer->on_is_shuffle_changed(m_is_shuffle);
   }
+  send_info_to_clients();
 }
 
 void Player::notify_observers_is_playing_changed() {
   for (auto observer : m_observers) {
     observer->on_is_playing_changed(m_is_playing);
   }
+  send_info_to_clients();
 }
 
 void Player::notify_observers_song_volume_changed() {
   for (auto observer : m_observers) {
     observer->on_song_volume_changed(m_song_volume);
   }
+  // send_info_to_clients();
 }
 
 void Player::notify_observers_song_position_changed() {
   for (auto observer : m_observers) {
     observer->on_song_position_changed(m_song_pos);
   }
+  send_info_to_clients();
 }
 
 void Player::notify_observers_loop_status_changed() {
   for (auto observer : m_observers) {
     observer->on_loop_status_changed(m_repeat);
   }
+  send_info_to_clients();
 }
 
 #ifdef SUPPORT_AUDIO_OUTPUT

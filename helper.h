@@ -49,6 +49,16 @@ class Helper {
     if (new_string) std::cout << std::endl;
   }
 
+  // Find the first digit
+  int firstDigit(int n) {
+    // Remove last digit from number
+    // till only one digit is left
+    while (n >= 10) n /= 10;
+
+    // return the first digit
+    return n;
+  }
+
  private:
   Helper() {}
 };

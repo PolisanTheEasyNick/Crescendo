@@ -215,10 +215,8 @@ class Player {
   // Server status
   bool serverRunning = true;
 
-  // whether any client connected to server
-  bool clientConnected = false;
-
-  int clientSocket = -1;
+  // Sends all current player info to the clients
+  void send_info_to_clients();
 
  public:
   /**
@@ -642,6 +640,11 @@ class Player {
    * Sends request to stop Socket server
    */
   void stop_server();
+
+  /**
+   * Clients that are connected to Socket server
+   */
+  std::vector<int> clients;
 #endif
 };
 #endif  // PLAYER_H

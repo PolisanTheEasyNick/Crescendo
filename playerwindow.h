@@ -2,6 +2,7 @@
 #define PLAYERWINDOW_H
 
 // #include <gio/gfile.h>
+#include <fcntl.h>
 #include <glib.h>
 #include <gtkmm/alertdialog.h>
 #include <gtkmm/application.h>
@@ -22,7 +23,11 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/togglebutton.h>
 #include <gtkmm/viewport.h>
+#include <netinet/in.h>
 #include <sigc++/signal.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <chrono>
@@ -34,7 +39,6 @@
 #include "player.h"
 #include "playlistrow.h"
 #include "volumebutton.h"
-
 /**
 
 * A class representing the main window of the music player application
@@ -44,6 +48,8 @@
 */
 class PlayerWindow : public Gtk::ApplicationWindow, public PlayerObserver {
  public:
+  static void signalHandler(int signal);
+
   /**
    * Default constructor for PlayerWindow
    */

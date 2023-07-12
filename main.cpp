@@ -40,18 +40,14 @@ void runNoGuiMode() {
 }
 
 int main(int argc, char *argv[]) {
-  std::cout << "Main first line" << std::endl;
-  std::signal(SIGINT, signalHandler);
-  std::signal(SIGTERM, signalHandler);
-
   // Check if the "--no-gui" argument is present
   for (int i = 1; i < argc; i++) {
     std::string arg = argv[i];
     if (arg == "--no-gui") {
       withGui = false;
+      std::signal(SIGINT, signalHandler);
+      std::signal(SIGTERM, signalHandler);
       break;
-    } else {
-#define GUI
     }
   }
 
