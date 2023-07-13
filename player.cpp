@@ -139,7 +139,6 @@ void Player::server_thread() {
       }
 
       ssize_t bytesRead = recv(clientSocket, &received, sizeof(received), 0);
-      std::cout << "Received bytes:  " << bytesRead << std::endl;
       if (bytesRead == -1) {
         Helper::get_instance().log("SOCKET: Failed to read from client socket");
         close(clientSocket);

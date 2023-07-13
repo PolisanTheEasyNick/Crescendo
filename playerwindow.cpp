@@ -843,8 +843,6 @@ void PlayerWindow::update_position_thread() {
             std::string current_info = "";
             auto metadata = window->m_player.get_metadata();
             for (const auto &data : metadata) {
-              std::cout << "data: " << data.first << ":" << data.second
-                        << std::endl;
               if (data.first == "mpris:artUrl") {
                 current_info += "art||" + data.second + "||";
               } else if (data.first == "xesam:artist") {
