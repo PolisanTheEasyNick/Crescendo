@@ -1,11 +1,14 @@
 #ifndef HELPER_H
 #define HELPER_H
+#include <chrono>
+#include <ctime>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <string>
 
 class Helper {
-public:
+ public:
   static Helper &get_instance() {
     static Helper instance;
     return instance;
@@ -30,8 +33,34 @@ public:
     return time_ss.str();
   }
 
-private:
+  /**
+   * Prints given string into stdout
+   *
+   * @param msg Message to print (type: std::string)
+   */
+  void log(std::string msg, bool new_string = true, bool date = true) {
+    auto now = std::chrono::system_clock::now();
+    std::time_t time = std::chrono::system_clock::to_time_t(now);
+    std::string datetime = std::ctime(&time);
+    datetime = datetime.substr(0, datetime.length() - 1);
+
+    if (date) std::cout << "[" << datetime << "] ";
+    std::cout << msg;
+    if (new_string) std::cout << std::endl;
+  }
+
+  // Find the first digit
+  int firstDigit(int n) {
+    // Remove last digit from number
+    // till only one digit is left
+    while (n >= 10) n /= 10;
+
+    // return the first digit
+    return n;
+  }
+
+ private:
   Helper() {}
 };
 
-#endif // HELPER_H
+#endif  // HELPER_H

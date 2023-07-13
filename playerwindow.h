@@ -1,12 +1,8 @@
 #ifndef PLAYERWINDOW_H
 #define PLAYERWINDOW_H
 
-#include "player.h"
-#include "playlistrow.h"
-#include "volumebutton.h"
-#include <atomic>
-#include <chrono>
-#include <gio/gfile.h>
+// #include <gio/gfile.h>
+#include <fcntl.h>
 #include <glib.h>
 #include <gtkmm/alertdialog.h>
 #include <gtkmm/application.h>
@@ -27,12 +23,22 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/togglebutton.h>
 #include <gtkmm/viewport.h>
+#include <netinet/in.h>
+#include <sigc++/signal.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#include <atomic>
+#include <chrono>
 #include <mutex>
 #include <random>
-#include <sigc++/signal.h>
 #include <thread>
 #include <tuple>
 
+#include "player.h"
+#include "playlistrow.h"
+#include "volumebutton.h"
 /**
 
 * A class representing the main window of the music player application
@@ -41,7 +47,9 @@
 * updating the UI accordingly when changes occur to the player's state.
 */
 class PlayerWindow : public Gtk::ApplicationWindow, public PlayerObserver {
-public:
+ public:
+  static void signalHandler(int signal);
+
   /**
    * Default constructor for PlayerWindow
    */
@@ -61,7 +69,7 @@ public:
    * @param new_song The new song title
    */
   void on_song_title_changed(const std::string &new_song) override {
-    std::cout << "New song name PlayerWindow: " << new_song << std::endl;
+    Helper::get_instance().log("New song name PlayerWindow: " + new_song);
     m_song_title_label.set_label(new_song);
   }
   /**
@@ -70,8 +78,8 @@ public:
    * @param new_song_artist The new song artist
    */
   void on_song_artist_changed(const std::string &new_song_artist) override {
-    std::cout << "New song author PlayerWindow: " << new_song_artist
-              << std::endl;
+    Helper::get_instance().log("New song author PlayerWindow: " +
+                               new_song_artist);
     m_song_artist_label.set_label(new_song_artist);
   }
   /**
@@ -80,8 +88,8 @@ public:
    * @param new_song_length The new song length
    */
   void on_song_length_changed(const std::string &new_song_length) override {
-    std::cout << "New song length PlayerWindow: " << new_song_length
-              << std::endl;
+    Helper::get_instance().log("New song length PlayerWindow: " +
+                               new_song_length);
     m_song_length_label.set_label(new_song_length);
   }
   /**
@@ -90,8 +98,8 @@ public:
    * @param new_is_shuffle The new player's shuffle state.
    */
   void on_is_shuffle_changed(const bool &new_is_shuffle) override {
-    std::cout << "New song shuffle PlayerWindow: " << new_is_shuffle
-              << std::endl;
+    Helper::get_instance().log("New song shuffle PlayerWindow: " +
+                               std::to_string(new_is_shuffle));
     if (new_is_shuffle) {
       m_shuffle_button.get_style_context()->add_class("shuffle-enabled");
     } else {
@@ -104,14 +112,13 @@ public:
    * @param new_is_playing The new player's is_playing state.
    */
   void on_is_playing_changed(const bool &new_is_playing) override {
-    std::cout << "New song isplaying PlayerWindow: " << new_is_playing
-              << std::endl;
+    Helper::get_instance().log("New song isplaying PlayerWindow: " +
+                               std::to_string(new_is_playing));
     if (new_is_playing) {
       // Resume the position thread
       resume_position_thread();
       m_playpause_button.set_icon_name("media-pause");
     } else {
-
       // Stop the position thread
       stop_position_thread();
       m_playpause_button.set_icon_name("media-play");
@@ -123,8 +130,8 @@ public:
    * @param new_song_volume The new player's volume.
    */
   void on_song_volume_changed(const double &new_song_volume) override {
-    std::cout << "New song volume PlayerWindow: " << new_song_volume
-              << std::endl;
+    Helper::get_instance().log("New song volume PlayerWindow: " +
+                               std::to_string(new_song_volume));
     m_lock_volume_changing = true;
     m_volume_bar_scale_button.set_value(new_song_volume);
     m_lock_volume_changing = false;
@@ -136,7 +143,7 @@ public:
    * @param new_song_pos The new song position.
    */
   void on_song_position_changed(const uint64_t &new_song_pos) override {
-    std::cout << "New song pos: " << new_song_pos << std::endl;
+    Helper::get_instance().log("New song pos: " + std::to_string(new_song_pos));
     m_current_pos_label.set_label(
         Helper::get_instance().format_time(new_song_pos));
     double pos = m_player.get_position();
@@ -153,14 +160,15 @@ public:
    * @param new_loop_status The new player loop status.
    */
   void on_loop_status_changed(const int &new_loop_status) override {
-    std::cout << "New loop status: " << new_loop_status << std::endl;
-    if (new_loop_status == -1 || new_loop_status == 0) { // none
+    Helper::get_instance().log("New loop status: " +
+                               std::to_string(new_loop_status));
+    if (new_loop_status == -1 || new_loop_status == 0) {  // none
       m_repeat_button.set_icon_name("media-repeat-none");
-    } else if (new_loop_status == 1) { // playlist
+    } else if (new_loop_status == 1) {  // playlist
       m_repeat_button.set_icon_name("media-repeat-all");
-    } else if (new_loop_status == 2) { // song
+    } else if (new_loop_status == 2) {  // song
       m_repeat_button.set_icon_name("media-repeat-single");
-    } else { // none
+    } else {  // none
       m_repeat_button.set_icon_name("media-repeat-none");
     }
   }
@@ -174,46 +182,47 @@ public:
   /**
    * Callback function, which called after current music ends
    */
-  static void on_music_ends();
+  void on_music_ends();
+  static void on_music_ends_static();
 #endif
 
-protected:
-  static Player m_player; // Player object
+ protected:
+  Player m_player;  // Player object
   /**
    * Callback function after button clicked
    */
   void on_playpause_clicked(), on_prev_clicked(), on_next_clicked(),
       on_shuffle_clicked(), on_player_choose_clicked(),
       on_device_choose_clicked(), on_loop_clicked();
-  Gtk::Grid m_main_grid; // Main UI Grid
+  Gtk::Grid m_main_grid;  // Main UI Grid
   Gtk::Box m_control_buttons_box,
-      m_volume_and_player_box; // Box that contains buttons
+      m_volume_and_player_box;  // Box that contains buttons
   Gtk::Button m_playpause_button, m_prev_button, m_next_button,
       m_shuffle_button, m_player_choose_button, m_device_choose_button,
       m_add_song_to_playlist_button, m_repeat_button;
   Gtk::Label m_song_title_label, m_song_artist_label, m_current_pos_label,
       m_song_length_label;
-  Gtk::Scale m_progress_bar_song_scale; // Scale which contains progress bar
+  Gtk::Scale m_progress_bar_song_scale;  // Scale which contains progress bar
   /**
    * VolumeButton object, which creates button, that on click creates popup for
    * volume choosing
    */
   VolumeButton m_volume_bar_scale_button;
   Gtk::Popover m_player_choose_popover,
-      m_device_choose_popover; // Popover for choosing Player or Device
+      m_device_choose_popover;  // Popover for choosing Player or Device
   Gtk::ListBox m_song_title_list,
-      m_playlist_listbox; // Listbox for title and artist or for playlist items
+      m_playlist_listbox;  // Listbox for title and artist or for playlist items
   static PlaylistRow
-      *m_activated_row; // Pointer to currently selected row in local player
+      *m_activated_row;  // Pointer to currently selected row in local player
 
-  std::atomic_bool stop_flag{false}; // Flag to signal thread to stop
-  std::mutex m_mutex;                // Mutex to protect shared resources
-  std::thread m_position_thread;     // Thread for updating position
-  bool m_wait = false;               // Whether there is need to suspend thread
-  static unsigned int m_current_track; // current track index
+  std::atomic_bool stop_flag{false};  // Flag to signal thread to stop
+  std::mutex m_mutex;                 // Mutex to protect shared resources
+  std::thread m_position_thread;      // Thread for updating position
+  bool m_wait = false;                // Whether there is need to suspend thread
+  static unsigned int m_current_track;  // current track index
   static Gtk::ScrolledWindow *m_playlist_scrolled_window;
 
-private:
+ private:
   /**
    * Checks for player supported features and changes PlayerWindow UI
    * corresponsing to features
@@ -236,25 +245,28 @@ private:
    * thread just got new pos and updated it
    */
   bool m_lock_pos_changing = false, m_lock_volume_changing = false;
-  void update_position_thread(); // Thread function for updating position
-  void pause_position_thread();  // Pause position thread function
-  void resume_position_thread(); // Resume position thread function
-  void stop_position_thread();   // Stop position thread function
+  void update_position_thread();  // Thread function for updating position
+  void pause_position_thread();   // Pause position thread function
+  void resume_position_thread();  // Resume position thread function
+  void stop_position_thread();    // Stop position thread function
 #ifdef SUPPORT_AUDIO_OUTPUT
-  gboolean
-  on_signal_accept(const std::shared_ptr<Gdk::Drop>
-                       &); // signal when file or folder hovered at window
+  gboolean on_signal_accept(
+      const std::shared_ptr<Gdk::Drop>
+          &);  // signal when file or folder hovered at window
   gboolean on_signal_drop(const Glib::ValueBase &value, double,
-                          double); // when file or folder dropped at window
-  void on_signal_leave();          // when dropping canceled
+                          double);  // when file or folder dropped at window
+  void on_signal_leave();           // when dropping canceled
   void add_directory_files_to_playlist(
       const std::string
-          &directory_path); // at files at directory recursively to playlist
-  sigc::connection m_conn_accept;              // connection for signal accept
-  sigc::connection m_conn_drop;                // connection for signal drop
-  sigc::connection m_conn_leave;               // connection for signal leave
-  Glib::RefPtr<Gtk::DropTarget> m_drop_target; // drop target pointer
+          &directory_path);  // at files at directory recursively to playlist
+  sigc::connection m_conn_accept;               // connection for signal accept
+  sigc::connection m_conn_drop;                 // connection for signal drop
+  sigc::connection m_conn_leave;                // connection for signal leave
+  Glib::RefPtr<Gtk::DropTarget> m_drop_target;  // drop target pointer
+  static PlayerWindow
+      *s_instance;  // Static member variable to hold the current instance
+
 #endif
 };
 
-#endif // PLAYERWINDOW_H
+#endif  // PLAYERWINDOW_H

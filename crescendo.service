@@ -1,0 +1,12 @@
+[Unit]
+Description=Crescendo Player
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+ExecStart=/usr/local/bin/crescendo --no-gui
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

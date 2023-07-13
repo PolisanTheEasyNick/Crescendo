@@ -1,15 +1,17 @@
 #ifndef PLAYER_H
 #define PLAYER_H
 
-#include "helper.h"
-#include "pugixml.hpp"
 #include <algorithm>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <list>
 #include <sstream>
+#include <thread>
 #include <vector>
+
+#include "helper.h"
+#include "pugixml.hpp"
 
 #ifdef HAVE_PULSEAUDIO
 #include <pulse/proplist.h>
@@ -19,9 +21,10 @@
 #ifdef SUPPORT_AUDIO_OUTPUT
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
-#include <mutex>
 #include <sndfile.h>
 #include <unistd.h>
+
+#include <mutex>
 #endif
 
 #ifdef HAVE_DBUS
@@ -29,7 +32,7 @@
 #endif
 
 class PlayerObserver {
-public:
+ public:
   /**
    * Function, that will be called when song title changed
    *
@@ -81,7 +84,7 @@ public:
 };
 
 class Player {
-private:
+ private:
   /**
    * Vector of DBus accessible players
    * This vector contains pairs of std::string-std::string
@@ -89,7 +92,7 @@ private:
    * Second string contain DBus interface of player
    */
   std::vector<std::pair<std::string, std::string>>
-      m_players; // Name: dbus interface
+      m_players;  // Name: dbus interface
   /**
    * Vector of PulseAudio accessible output devices
    * This vector contains pairs of std::string-unsigned short
@@ -97,7 +100,7 @@ private:
    * unsighed short contain PulseAudio sink index
    */
   std::vector<std::pair<std::string, unsigned short>>
-      m_devices; // Name: pulseaudio sink index
+      m_devices;  // Name: pulseaudio sink index
   /**
    * List of observers, which need to be notified
    * when some property of player is changed
@@ -199,12 +202,27 @@ private:
    */
   Mix_Music *m_current_music = nullptr;
 #endif
+  /**
+   * Whether to use player class with gui or not
+   */
+  bool m_with_gui;
+  /**
+   * Server thread
+   */
+  void server_thread();
+  std::thread m_server_thread;
 
-public:
+  // Server status
+  bool serverRunning = true;
+
+  // Sends all current player info to the clients
+  void send_info_to_clients();
+
+ public:
   /**
    * Constructs a new Player object.
    */
-  Player();
+  Player(bool with_gui = true);
   /**
    * Destructs a new Player object.
    */
@@ -232,7 +250,7 @@ public:
    * @param id - new player id (type: unsigned int)
    * @return true on success, false otherwise (type: bool)
    */
-  bool select_player(unsigned int id); // select player id
+  bool select_player(unsigned int id);  // select player id
   /**
    * Sends PlayPause signal to DBus or Play/Pause current song for local player
    * @return true on success, false otherwise (type: bool)
@@ -451,9 +469,14 @@ public:
    * Callback function which processes new position of song
    */
   void on_seeked(sdbus::Signal &signal);
+  /**
+   * Thread function which prints current position
+   */
+  void update_position_thread();
 #endif
   /**
-   * Adds new observer, which be notified when player or song properties changes
+   * Adds new observer, which be notified when player or song properties
+   * changes
    * @param observer class object, that must be notified
    */
   void add_observer(PlayerObserver *observer);
@@ -607,6 +630,21 @@ public:
    * @param music A pointer to the Mix_Music object to add to the playlist.
    */
   void add_to_playlist(Mix_Music *music);
+
+  /**
+   * Starts Socket server
+   */
+  void start_server();
+
+  /**
+   * Sends request to stop Socket server
+   */
+  void stop_server();
+
+  /**
+   * Clients that are connected to Socket server
+   */
+  std::vector<int> clients;
 #endif
 };
-#endif // PLAYER_H
+#endif  // PLAYER_H
