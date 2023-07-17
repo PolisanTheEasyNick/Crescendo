@@ -8,6 +8,9 @@
 
 #include <thread>
 
+#include "rohrkabel/spa/pod/object/body.hpp"
+#include "spa/pod/pod.h"
+
 /**
  * Converts bool to const char*
  *
@@ -125,16 +128,8 @@ void Player::server_thread() {
         Helper::get_instance().log(
             "SOCKET: Timeout occurred. Closing the client connection.");
         close(clientSocket);
-        std::cout << "Clients before: " << std::endl;
-        for (const auto &client : clients) {
-          std::cout << client << std::endl;
-        }
         clients.erase(std::remove(clients.begin(), clients.end(), clientSocket),
                       clients.end());
-        std::cout << "Clients after: " << std::endl;
-        for (const auto &client : clients) {
-          std::cout << client << std::endl;
-        }
         break;
       }
 
@@ -156,7 +151,8 @@ void Player::server_thread() {
         // Process the received byte
         // int received = ntohl(buffer);
         // received = ntohl(received);
-        if (received != 0) std::cout << "Received: " << received << std::endl;
+        if (received != 0)
+          Helper::get_instance().log("Received: " + std::to_string(received));
         int operation_code = Helper::get_instance().firstDigit(received);
         switch (operation_code) {
           case 0: {
@@ -1422,14 +1418,17 @@ unsigned short Player::get_current_device_sink_index() {
 #ifdef HAVE_PULSEAUDIO
   // Code thatuse PulseAudio
   Helper::get_instance().log("PulseAudio installed");
+#elif HAVE_PIPEWIRE
+  Helper::get_instance().log("PipeWire installed");
 #else
   // Code that doesn't uses PulseAudio
-  Helper::get_instance().log("PulseAudio not installed, can't continue.");
+  Helper::get_instance().log(
+      "PulseAudio or PipeWire not installed, can't continue.");
   return -1;
 #endif
   if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
     Helper::get_instance().log("Player not selected, can't continue.");
-    return false;
+    return -1;
   }
   static uint32_t proc_id = 0;
 #ifdef SUPPORT_AUDIO_OUTPUT
@@ -1548,6 +1547,81 @@ unsigned short Player::get_current_device_sink_index() {
     pa_mainloop_iterate(mainloop, true, NULL);
   }
 #endif
+
+#if HAVE_PIPEWIRE
+  auto main_loop = pipewire::main_loop();
+  auto context = pipewire::context(main_loop);
+  auto core = pipewire::core(context);
+  auto reg = pipewire::registry(core);
+  auto reg_listener = reg.listen<pipewire::registry_listener>();
+  struct node_my {
+    uint32_t node_id;
+    uint32_t client_id;
+    uint32_t proc_id;
+    std::string media_class;
+  };
+
+  struct link_my {
+    uint32_t link_id;
+    uint32_t client_id;
+    uint32_t input_node;
+    uint32_t output_node;
+  };
+
+  std::vector<node_my> nodes;
+  std::vector<link_my> links;
+
+  reg_listener.on<pipewire::registry_event::global>(
+      [&](const pipewire::global &global) {
+        if (global.type == pipewire::node::type) {
+          auto node = reg.bind<pipewire::node>(global.id).get();
+          auto info = node->info();
+          node_my node_to_add;
+          node_to_add.node_id = info.id;
+          for (const auto &prop : info.props) {
+            if (prop.first != "pipewire.sec.label")
+              if (prop.first == "client.id")
+                node_to_add.client_id = std::stoi(prop.second);
+            if (prop.first == "application.process.id")
+              node_to_add.proc_id = std::stoi(prop.second);
+            if (prop.first == "media.class")
+              node_to_add.media_class = prop.second;
+          }
+          nodes.push_back(node_to_add);
+        }
+        if (global.type == pipewire::link::type) {
+          auto props = global.props;
+          link_my link;
+          link.link_id = global.id;
+          for (const auto &prop : props) {
+            if (prop.first == "client.id")
+              link.client_id = std::stoi(prop.second);
+            if (prop.first == "link.input.node")
+              link.input_node = std::stoi(prop.second);
+            if (prop.first == "link.output.node")
+              link.output_node = std::stoi(prop.second);
+          }
+          links.push_back(link);
+        }
+      });
+  core.update();
+  uint32_t current_node_id = -1;
+  for (const auto &node : nodes) {
+    if (node.proc_id == proc_id && node.media_class == "Stream/Output/Audio") {
+      current_node_id = node.node_id;
+      break;
+    };
+  }
+  // searching to which node client linked
+  for (const auto &link : links) {
+    if (link.output_node == current_node_id) {
+      player_sink_id = link.input_node;
+      break;
+    }
+  }
+
+#endif
+
   if (player_sink_id == -1) {
     Helper::get_instance().log("Not found player sink. Can't continue.");
     return -1;
@@ -1802,6 +1876,8 @@ Player::get_output_devices() {
 #ifdef HAVE_PULSEAUDIO
   // Code thatuse PulseAudio
   Helper::get_instance().log("PulseAudio installed");
+#elif HAVE_PIPEWIRE
+  Helper::get_instance().log("PipeWire installed");
 #else
   // Code that doesn't uses PulseAudio
   Helper::get_instance().log("PulseAudio not installed, can't continue.");
@@ -1863,14 +1939,62 @@ Player::get_output_devices() {
   pa_context_unref(context);
   pa_mainloop_free(mainloop);
 #endif
+
+#ifdef HAVE_PIPEWIRE
+  auto main_loop = pipewire::main_loop();
+  auto context = pipewire::context(main_loop);
+  auto core = pipewire::core(context);
+  auto reg = pipewire::registry(core);
+
+  auto reg_listener = reg.listen<pipewire::registry_listener>();
+
+  struct output_device {
+    uint32_t node_id;
+    std::string node_desc;
+    std::string media_class;
+  };
+
+  std::vector<output_device> devices;
+
+  reg_listener.on<pipewire::registry_event::global>(
+      [&](const pipewire::global &global) {
+        if (global.type == pipewire::node::type) {
+          auto node = reg.bind<pipewire::node>(global.id).get();
+          auto info = node->info();
+          output_device device;
+          device.node_id = info.id;
+          for (const auto &prop : info.props) {
+            if (prop.first == "media.class") device.media_class = prop.second;
+            if (prop.first == "node.description")
+              device.node_desc = prop.second;
+          }
+          devices.push_back(device);
+        }
+      });
+
+  core.update();
+
+  for (const auto &device : devices) {
+    if (device.media_class == "Audio/Sink" &&
+        device.node_desc != "Loopback Analog Stereo")
+      m_devices.emplace_back(device.node_desc, device.node_id);
+  }
+
+#endif
+
   return m_devices;  // return devices
 }
 
 void Player::set_output_device(unsigned short output_sink_index) {
 #ifdef HAVE_PULSEAUDIO
+  // Code thatuse PulseAudio
   Helper::get_instance().log("PulseAudio installed");
+#elif HAVE_PIPEWIRE
+  Helper::get_instance().log("PipeWire installed");
 #else
-  Helper::get_instance().log("PulseAudio not installed, can't continue.");
+  // Code that doesn't uses PulseAudio
+  Helper::get_instance().log(
+      "PulseAudio or PipeWire not installed, can't continue.");
   return;
 #endif
   if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
@@ -2022,6 +2146,86 @@ void Player::set_output_device(unsigned short output_sink_index) {
   pa_context_disconnect(context);
   pa_context_unref(context);
   pa_mainloop_free(mainloop);
+#endif
+
+#ifdef HAVE_PIPEWIRE
+  auto main_loop = pipewire::main_loop();
+  auto context = pipewire::context(main_loop);
+  auto core = pipewire::core(context);
+  auto reg = pipewire::registry(core);
+  auto reg_listener = reg.listen<pipewire::registry_listener>();
+  struct node_my {
+    uint32_t node_id;
+    uint32_t client_id;
+    uint32_t proc_id;
+    std::string media_class;
+  };
+
+  struct link_my {
+    pw_link *link;
+    uint32_t link_id;
+    uint32_t client_id;
+    uint32_t input_node;
+    uint32_t output_node;
+  };
+
+  std::vector<node_my> nodes;
+  std::vector<link_my> links;
+
+  reg_listener.on<pipewire::registry_event::global>(
+      [&](const pipewire::global &global) {
+        if (global.type == pipewire::node::type) {
+          auto node = reg.bind<pipewire::node>(global.id).get();
+          auto info = node->info();
+          node_my node_to_add;
+          node_to_add.node_id = info.id;
+          for (const auto &prop : info.props) {
+            if (prop.first != "pipewire.sec.label")
+              if (prop.first == "client.id")
+                node_to_add.client_id = std::stoi(prop.second);
+            if (prop.first == "application.process.id")
+              node_to_add.proc_id = std::stoi(prop.second);
+            if (prop.first == "media.class")
+              node_to_add.media_class = prop.second;
+          }
+          nodes.push_back(node_to_add);
+        }
+        if (global.type == pipewire::link::type) {
+          auto props = global.props;
+          link_my link;
+          link.link_id = global.id;
+          for (const auto &prop : props) {
+            if (prop.first == "client.id")
+              link.client_id = std::stoi(prop.second);
+            if (prop.first == "link.input.node")
+              link.input_node = std::stoi(prop.second);
+            if (prop.first == "link.output.node")
+              link.output_node = std::stoi(prop.second);
+          }
+          link.link = static_cast<struct pw_link *>(
+              pw_registry_bind(reg.get(), global.id, PW_TYPE_INTERFACE_Link,
+                               PW_VERSION_LINK, 0));
+          links.push_back(link);
+        }
+      });
+  core.update();
+  uint32_t current_player_id = -1;
+  for (const auto &node : nodes) {
+    if (node.proc_id == proc_id && node.media_class == "Stream/Output/Audio") {
+      current_player_id = node.node_id;
+    };
+  }
+
+  // searching to which node client linked
+  for (const auto &link : links) {
+    if (link.output_node == current_player_id) {
+      // TODO: Create link, move ports...
+      std::cout << "Player (source, input): " << current_player_id << std::endl;
+      std::cout << "Device (output): " << output_sink_index << std::endl;
+      break;
+    }
+  }
+
 #endif
 }
 

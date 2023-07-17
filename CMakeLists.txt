@@ -40,8 +40,19 @@ target_link_libraries(crescendo PRIVATE pugixml ${GTKMM_LIBRARIES})
 
 find_package(PulseAudio)
 pkg_search_module(PKG_PipeWire QUIET libpipewire-0.3 libpipewire-0.2)
-if(PulseAudio_FOUND AND PKG_PipeWire_NOT_FOUND)
-  # if(PulseAudio_FOUND)
+if(PKG_PipeWire_FOUND)
+  add_definitions(-DHAVE_PIPEWIRE)
+  target_include_directories(crescendo PRIVATE ${PKG_PipeWire_INCLUDE_DIRS})
+  target_link_libraries(crescendo PRIVATE ${PKG_PipeWire_LIBRARIES})
+  message(STATUS "Pipewire found.")
+  include(FetchContent)
+  FetchContent_Declare(
+    rohrkabel
+    GIT_REPOSITORY "https://github.com/Soundux/rohrkabel"
+    GIT_TAG v1.5)
+  FetchContent_MakeAvailable(rohrkabel)
+  target_link_libraries(crescendo PRIVATE rohrkabel)
+elseif(PulseAudio_FOUND)
   add_definitions(-DHAVE_PULSEAUDIO)
   target_include_directories(crescendo PRIVATE ${PULSEAUDIO_INCLUDE_DIRS})
   target_link_libraries(crescendo PRIVATE ${PULSEAUDIO_LIBRARIES} pulse)
@@ -49,7 +60,7 @@ if(PulseAudio_FOUND AND PKG_PipeWire_NOT_FOUND)
 else()
   message(
     WARNING
-      "PulseAudio not found or PipeWire installed. Building without PulseAudio support."
+      "PulseAudio and PipeWire not found. Building without audio change support."
   )
 endif()
 
