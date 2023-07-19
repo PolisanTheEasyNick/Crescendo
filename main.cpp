@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 
-static bool withGui = true;
+bool withGui = true;
 
 #include "gtkmm/application.h"
 #include "player.h"
@@ -74,6 +74,5 @@ int main(int argc, char *argv[]) {
     auto app = Gtk::Application::create("org.polisan.crescendo");
     return app->make_window_and_run<PlayerWindow>(argc, argv);
   }
-
   return 0;
 }

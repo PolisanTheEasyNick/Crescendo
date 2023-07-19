@@ -318,10 +318,11 @@ PlayerWindow::PlayerWindow() {
     set_default_size(500, 300);  // if local, than set biggest size
   }
 
-#ifndef HAVE_PULSEAUDIO
+#if !defined(HAVE_PULSEAUDIO) && !defined(HAVE_PIPEWIRE)
   // Code that doesn't uses PulseAudio
   Helper::get_instance().log(
-      "PulseAudio not installed, making button for choosing output sound "
+      "PulseAudio and PipeWire not installed, making button for choosing "
+      "output sound "
       "device unactive");
   m_device_choose_button.set_sensitive(false);
   m_device_choose_button.set_tooltip_text(
@@ -690,9 +691,12 @@ void PlayerWindow::on_device_choose_clicked() {
 #ifdef HAVE_PULSEAUDIO
   // Code thatuse PulseAudio
   Helper::get_instance().log("PulseAudio installed");
+#elif HAVE_PIPEWIRE
+  Helper::get_instance().log("PipeWire installed");
 #else
   // Code that doesn't uses PulseAudio
-  Helper::get_instance().log("PulseAudio not installed, can't continue.");
+  Helper::get_instance().log(
+      "PulseAudio or PipeWire not installed, can't continue.");
   return;
 #endif
   // Set up popover for device choose button

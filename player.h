@@ -18,6 +18,15 @@
 #include <pulse/pulseaudio.h>
 #endif
 
+#ifdef HAVE_PIPEWIRE
+#include <pipewire/extensions/metadata.h>
+#include <pipewire/pipewire.h>
+
+#include <rohrkabel/link/link.hpp>
+#include <rohrkabel/main_loop.hpp>
+#include <rohrkabel/registry/registry.hpp>
+#endif
+
 #ifdef SUPPORT_AUDIO_OUTPUT
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
