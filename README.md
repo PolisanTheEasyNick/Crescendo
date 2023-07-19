@@ -1,20 +1,21 @@
 # Crescendo
 ![Logo](icon.svg "Crescendo logo")  
-Crescendo is a music player controller that can retrieve information about a player via dbus in real-time, control it, and change the output sound device for this player using PulseAudio.
+Crescendo is a music player controller that can retrieve information about a player via dbus in real-time, control it, and change the output sound device for this player using PulseAudio or PipeWire.
 
 ## Features
 * Real-time information retrieval for any player via dbus
 * Control the player via dbus commands
-* Change the output sound device for the player via PulseAudio
+* Change the output sound device for the player via PulseAudio or PipeWire
 * Intuitive graphical user interface
 
 ## Dependencies:
 * C++17
 * gtkmm-4.0
 * pugixml 
-* PulseAudio (optional, you will not be able to change the output sound device for player)
+* PulseAudio or PipeWire(optional, you will not be able to change the output sound device for player)
 * [sdbus-c++](https://github.com/Kistler-Group/sdbus-cpp) (optional, without it you will not be able to control another players)
 * SDL2, SDL2_mixer, taglib (optional, you will not be able to use Crescendo as local player for audio files)
+* [Rohrkabel](https://github.com/Soundux/rohrkabel) (optional, if PipeWire found fill be fetched automatically)
 
 ## Installation
 To install Crescendo, follow these steps:
