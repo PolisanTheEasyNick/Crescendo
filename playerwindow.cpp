@@ -711,7 +711,7 @@ void PlayerWindow::on_device_choose_clicked() {
                              std::to_string(selected_device_sink_index));
   auto devices_vec = m_player.get_output_devices();  // get devices vector
 
-  for (const auto &dev : devices_vec) {  // for every devicef
+  for (const auto &dev : devices_vec) {  // for every device
     auto device_choosing_button =
         Gtk::ToggleButton(dev.first);                // create button
     if (dev.second == selected_device_sink_index) {  // if current button is for

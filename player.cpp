@@ -2171,7 +2171,7 @@ void Player::set_output_device(unsigned short output_sink_index) {
 
   std::vector<node_my> nodes;
   std::vector<link_my> links;
-
+  pw_metadata *metadata = nullptr;
   reg_listener.on<pipewire::registry_event::global>(
       [&](const pipewire::global &global) {
         if (global.type == pipewire::node::type) {
@@ -2207,6 +2207,17 @@ void Player::set_output_device(unsigned short output_sink_index) {
                                PW_VERSION_LINK, 0));
           links.push_back(link);
         }
+        if (!metadata && global.type == PW_TYPE_INTERFACE_Metadata) {
+          auto info = global.props;
+          for (const auto &prop : info) {
+            if (prop.first == "metadata.name" && prop.second == "default") {
+              metadata = static_cast<pw_metadata *>(pw_registry_bind(
+                  reg.get(), global.id, PW_TYPE_INTERFACE_Metadata,
+                  PW_VERSION_METADATA, 0));
+              break;
+            }
+          }
+        }
       });
   core.update();
   uint32_t current_player_id = -1;
@@ -2219,9 +2230,16 @@ void Player::set_output_device(unsigned short output_sink_index) {
   // searching to which node client linked
   for (const auto &link : links) {
     if (link.output_node == current_player_id) {
-      // TODO: Create link, move ports...
-      std::cout << "Player (source, input): " << current_player_id << std::endl;
-      std::cout << "Device (output): " << output_sink_index << std::endl;
+      if (metadata) {
+        pw_metadata_set_property(metadata, current_player_id, "target.node",
+                                 "Spa:Id",
+                                 std::to_string(output_sink_index).c_str());
+      } else {
+        Helper::get_instance().log(
+            "Error! Metadata not found, so can't change output device.");
+      }
+
+      core.update();
       break;
     }
   }

@@ -19,6 +19,7 @@
 #endif
 
 #ifdef HAVE_PIPEWIRE
+#include <pipewire/extensions/metadata.h>
 #include <pipewire/pipewire.h>
 
 #include <rohrkabel/link/link.hpp>
