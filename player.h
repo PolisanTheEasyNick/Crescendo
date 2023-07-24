@@ -350,6 +350,11 @@ class Player {
    */
   bool get_playback_status();
   /**
+   * Gets current player index
+   * @return current player index, (type: uint64_t)
+   */
+  uint64_t get_current_player_index();
+  /**
    * Gets current player name
    * @return current player name, (type: string)
    */

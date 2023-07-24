@@ -202,10 +202,59 @@ void Player::server_thread() {
                 "SOCKET: Received byte: 7 (Set position)");
             std::string numberStr = std::to_string(received);
             std::string digits = numberStr.substr(1);
+            int newPos;
+            try {
             int newPos = std::stoi(digits);
+            } catch(std::invalid_argument) {
+              Helper::get_instance().log("Error while setting position! Can't cast \"" + digits + "\" to int.");
+            }
+
             Helper::get_instance().log("Fetched position " + digits);
             set_position(newPos);
             break;
+          }
+          case 8: {  // Get players. Need to send status 8, count of players and
+                     // player:id pairs.
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 8 (Get players)");
+
+            auto players = get_players();
+            uint64_t selected = get_current_player_index();
+            std::string result = "8||" + std::to_string(selected);
+            for (const auto &player : players) {
+              if (player.first == "Local")
+                result += "||" + player.first + "||Local";
+              else
+                result += "||" + player.first + "||" + player.second;
+            }
+            for (int client : clients) {
+              ssize_t bytesSent =
+                  send(client, result.c_str(), result.size(), 0);
+
+              if (bytesSent == -1) {
+                Helper::get_instance().log(
+                    "Failed to send message to the client " +
+                    std::to_string(client));
+              } else {
+                Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
+                                           " bytes to the client " +
+                                           std::to_string(client));
+              }
+            }
+          }
+          case 9: { //change player name. Desired input format: "9||playerIndex"
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 9 (Set player)");
+            // Find the position of "9||" in the input string
+            std::string numberStr = std::to_string(received);
+            std::string playerID = numberStr.substr(1);
+            uint64_t index;
+            try {
+              index = std::stoi(playerID);
+            } catch(std::invalid_argument) {
+              Helper::get_instance().log("Error while setting position! Can't cast \"" + playerID + "\" to int.");
+            }
+            select_player(index);
           }
           default: {
             Helper::get_instance().log("SOCKET: Received unknown byte: " +
@@ -1375,6 +1424,17 @@ bool Player::get_playback_status() {
   }
 #endif
   return false;
+}
+
+uint64_t Player::get_current_player_index()
+{
+  std::string current_player_name = get_current_player_name();
+  for(int i = 0; i < m_players.size(); i++) {
+    if(m_players[i].first == current_player_name) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 std::string Player::get_current_player_name() {
