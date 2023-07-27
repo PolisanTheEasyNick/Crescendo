@@ -173,6 +173,52 @@ class PlayerWindow : public Gtk::ApplicationWindow, public PlayerObserver {
     }
   }
 
+  void on_player_toggled(const bool toLocal) override {
+#ifdef SUPPORT_AUDIO_OUTPUT
+    if (toLocal) {  // if changed to local
+      m_add_song_to_playlist_button.show();  // show button for adding to playlist
+      m_playlist_scrolled_window->show();    // show playlist
+      m_main_grid.set_valign(Gtk::Align::FILL);
+      set_default_size(500, 300);  // set biggest size
+      m_conn_accept =
+          m_drop_target->signal_accept().connect(  // add signal for accepting dnd
+              [&](const std::shared_ptr<Gdk::Drop> &drop) -> gboolean {
+                  return on_signal_accept(drop);
+              },
+              false);
+
+      m_conn_drop =
+          m_drop_target->signal_drop().connect(  // add signal from dropping dnd
+              [&](const Glib::ValueBase &value, double x, double y) {
+                  return on_signal_drop(value, x, y);
+              },
+              false);
+      m_conn_leave = m_drop_target->signal_leave().connect(
+          [&] { return on_signal_leave(); });
+      add_controller(m_drop_target);  // add dnd controller to window
+
+    } else {                                 // if changed player not local
+      m_add_song_to_playlist_button.hide();  // hide playlist add button
+      m_playlist_scrolled_window->hide();    // hide playlist
+      m_main_grid.set_valign(Gtk::Align::END);
+      set_default_size(500, 100);  // set smallest size
+      if (m_conn_accept.connected()) {
+          Helper::get_instance().log("Disconnecting accept signal");
+          m_conn_accept.disconnect();  // disconnect from signal accept
+      }
+      if (m_conn_drop.connected()) {
+          Helper::get_instance().log("Disconnecting drop signal");
+          m_conn_drop.disconnect();  // disconnect from signal drop
+      }
+      if (m_conn_leave.connected()) {
+          Helper::get_instance().log("Disconnecting leave signal");
+          m_conn_leave.disconnect();  // disconnect from signal leave
+      }
+      remove_controller(m_drop_target);  // remove controller
+    }
+#endif
+  }
+
 #ifdef SUPPORT_AUDIO_OUTPUT
   /**
    * Adds new song to playlist
