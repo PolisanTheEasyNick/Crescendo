@@ -82,7 +82,6 @@ void Player::server_thread() {
   while (serverRunning) {
     sockaddr_in clientAddress{};
     socklen_t clientAddressLength = sizeof(clientAddress);
-    int received;
     // Accept a client connection
     int clientSocket =
         accept(serverSocket, reinterpret_cast<sockaddr *>(&clientAddress),
@@ -109,7 +108,7 @@ void Player::server_thread() {
     while (serverRunning) {
       // Set up the timeout for recv()
       struct timeval timeout;
-      timeout.tv_sec = 5;  // Set the timeout value in seconds
+      timeout.tv_sec = 2;  // Set the timeout value in seconds
       timeout.tv_usec = 0;
 
       fd_set readSet;
@@ -133,7 +132,12 @@ void Player::server_thread() {
         break;
       }
 
-      ssize_t bytesRead = recv(clientSocket, &received, sizeof(received), 0);
+      char received[2048] = {0};
+      std::string receivedStr;
+      ssize_t bytesRead = recv(clientSocket, &received, sizeof(received) - 1, 0);
+      received[bytesRead] = '\0';
+      receivedStr = std::string(received);
+      memset(&(received[0]), 0, 2048);
       if (bytesRead == -1) {
         Helper::get_instance().log("SOCKET: Failed to read from client socket");
         close(clientSocket);
@@ -147,13 +151,14 @@ void Player::server_thread() {
         clients.erase(std::remove(clients.begin(), clients.end(), clientSocket),
                       clients.end());
         break;
-      } else if (bytesRead == sizeof(received)) {
+      } else {
         // Process the received byte
         // int received = ntohl(buffer);
         // received = ntohl(received);
-        if (received != 0)
-          Helper::get_instance().log("Received: " + std::to_string(received));
-        int operation_code = Helper::get_instance().firstDigit(received);
+        int operation_code = Helper::get_instance().getOPCode(receivedStr);
+        if(operation_code == 400 || operation_code == 40) operation_code = 4; //At startup in some reason receives "400" instead of "4"
+        if (operation_code != 0)
+            Helper::get_instance().log("Received: " + receivedStr);
         switch (operation_code) {
           case 0: {
             // std::cout << "Received byte: 0 (Testing connection)" <<
@@ -200,11 +205,115 @@ void Player::server_thread() {
           case 7: {
             Helper::get_instance().log(
                 "SOCKET: Received byte: 7 (Set position)");
-            std::string numberStr = std::to_string(received);
-            std::string digits = numberStr.substr(1);
-            int newPos = std::stoi(digits);
+            std::string digits = receivedStr.substr(3);
+            int newPos;
+            try {
+              newPos = std::stoi(digits);
+            } catch(std::invalid_argument) {
+              Helper::get_instance().log("Error while setting position! Can't cast \"" + digits + "\" to int.");
+            }
+
             Helper::get_instance().log("Fetched position " + digits);
             set_position(newPos);
+            break;
+          }
+          case 8: {  // Get players. Need to send status 8, count of players and
+                     // player:id pairs.
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 8 (Get players)");
+
+            auto players = get_players();
+            uint64_t selected = get_current_player_index();
+            std::string result = "8||" + std::to_string(selected);
+            for (const auto &player : players) {
+              if (player.first == "Local")
+                result += "||" + player.first + "||Local";
+              else
+                result += "||" + player.first + "||" + player.second;
+            }
+            for (int client : clients) {
+              ssize_t bytesSent =
+                  send(client, result.c_str(), result.size(), 0);
+
+              if (bytesSent == -1) {
+                Helper::get_instance().log(
+                    "Failed to send message to the client " +
+                    std::to_string(client));
+              } else {
+                Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
+                                           " bytes to the client " +
+                                           std::to_string(client));
+              }
+            }
+            break;
+          }
+          case 9: { //change player. Desired input format: "9||playerIndex"
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 9 (Set player)");
+            // Find the position of "9||" in the input string
+            std::string playerID = receivedStr.substr(3);
+            uint64_t index;
+            try {
+              index = std::stoi(playerID);
+            } catch(std::invalid_argument) {
+              Helper::get_instance().log("Error while setting player! Can't cast \"" + playerID + "\" to int.");
+            }
+            select_player(index);
+            if(m_players[index].first == "Local") {
+              notify_observers_player_choosed(true);
+            } else notify_observers_player_choosed(false);
+            break;
+          }
+          case 10: {
+            //get list of output devices: devicename||sinkid
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 10 (Get output devices)");
+            auto devices = get_output_devices();
+            uint64_t selected = get_current_device_sink_index();
+            std::string result = "9||" + std::to_string(selected);
+            for (const auto &device : devices) {
+              result += "||" + device.first + "||" + std::to_string(device.second);
+            }
+            for (int client : clients) {
+              ssize_t bytesSent =
+                  send(client, result.c_str(), result.size(), 0);
+
+              if (bytesSent == -1) {
+                Helper::get_instance().log(
+                    "Failed to send message to the client " +
+                    std::to_string(client));
+              } else {
+                Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
+                                           " bytes to the client " +
+                                           std::to_string(client));
+              }
+            }
+            break;
+          }
+          case 11: { //change output device. Desired input format: "11||sinkIndex"
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 11 (Set output device)");
+            std::string deviceID = receivedStr.substr(4);
+            uint64_t index;
+            try {
+              index = std::stoi(deviceID);
+            } catch(std::invalid_argument) {
+              Helper::get_instance().log("Error while setting output device! Can't cast \"" + deviceID + "\" to int.");
+            }
+            set_output_device(index);
+            break;
+          }
+          case 12: { //change volume. Desired input format: "12||newVolume"
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 12 (Set volume)");
+            std::string volume = receivedStr.substr(4);
+            double newVolume;
+            try {
+              newVolume = std::stod(volume);
+            } catch(std::invalid_argument) {
+              Helper::get_instance().log("Error while setting volume! Can't cast \"" + volume + "\" to double.");
+            }
+            set_volume(newVolume);
             break;
           }
           default: {
@@ -256,6 +365,7 @@ void Player::send_info_to_clients() {
     current_info += "playing||" + std::to_string(get_is_playing()) + "||";
     current_info += "shuffle||" + std::to_string(get_shuffle()) + "||";
     current_info += "repeat||" + std::to_string(get_repeat()) + "||";
+    current_info += "volume||" + std::to_string(get_volume()) + "||";
     for (int client : clients) {
       ssize_t bytesSent =
           send(client, current_info.c_str(), current_info.size(), 0);
@@ -1375,6 +1485,17 @@ bool Player::get_playback_status() {
   }
 #endif
   return false;
+}
+
+uint64_t Player::get_current_player_index()
+{
+  std::string current_player_name = get_current_player_name();
+  for(int i = 0; i < m_players.size(); i++) {
+    if(m_players[i].first == current_player_name) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 std::string Player::get_current_player_name() {
@@ -2775,7 +2896,7 @@ void Player::notify_observers_song_volume_changed() {
   for (auto observer : m_observers) {
     observer->on_song_volume_changed(m_song_volume);
   }
-  // send_info_to_clients();
+  send_info_to_clients();
 }
 
 void Player::notify_observers_song_position_changed() {
@@ -2790,6 +2911,13 @@ void Player::notify_observers_loop_status_changed() {
     observer->on_loop_status_changed(m_repeat);
   }
   send_info_to_clients();
+}
+
+void Player::notify_observers_player_choosed(const bool toLocal)
+{
+  for (auto observer : m_observers) {
+    observer->on_player_toggled(toLocal);
+  }
 }
 
 #ifdef SUPPORT_AUDIO_OUTPUT

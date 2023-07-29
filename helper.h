@@ -59,6 +59,40 @@ class Helper {
     return n;
   }
 
+  //Get operation code from string "code||...."
+  int getOPCode(std::string info) {
+    // Find the position of the first "||" in the input string
+    std::size_t pos = info.find("||");
+    if (pos != std::string::npos) {
+      // Extract the substring from the beginning of the input string until the first "||"
+      std::string numberStr = info.substr(0, pos);
+
+      // Convert the extracted substring to an integer
+      int number;
+      try {
+          number = std::stoi(numberStr);
+      } catch (const std::exception& ex) {
+          log("Error converting the number " + numberStr + ": " + std::string(ex.what()));
+          return -1;
+      }
+
+      // Use the extracted integer value (number) as needed
+      log("Extracted number: " + std::to_string(number));
+      return number;
+    } else {
+      int number;
+      try {
+          number = std::stoi(info);
+          return number;
+      } catch (const std::exception& ex) {
+          log("Error converting the number: " + std::string(ex.what()));
+          return -1;
+      }
+      log("Invalid input format. Could not find '||' or number in the input string.");
+      return -1;
+    }
+  }
+
  private:
   Helper() {}
 };

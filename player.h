@@ -90,6 +90,14 @@ class PlayerObserver {
    * @param new_loop_status New volume (type: const int&)
    */
   virtual void on_loop_status_changed(const int &new_loop_status) = 0;
+
+  /**
+   * Function, that will be called when player toggled from Local to DBus or from DBus to Local
+   * When toggled, need to update GUI.
+   *
+   * @param new_loop_status New volume (type: const int&)
+   */
+  virtual void on_player_toggled(const bool toLocal) = 0;
 };
 
 class Player {
@@ -350,6 +358,11 @@ class Player {
    */
   bool get_playback_status();
   /**
+   * Gets current player index
+   * @return current player index, (type: uint64_t)
+   */
+  uint64_t get_current_player_index();
+  /**
    * Gets current player name
    * @return current player name, (type: string)
    */
@@ -590,6 +603,11 @@ class Player {
    * Notifies observers that the loop status of the player has changed.
    */
   void notify_observers_loop_status_changed();
+
+  /**
+   * Notifies observers (GUI) that local player toggled
+   */
+  void notify_observers_player_choosed(const bool toLocal);
 
 #ifdef SUPPORT_AUDIO_OUTPUT
   /**
