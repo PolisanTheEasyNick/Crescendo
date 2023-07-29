@@ -303,6 +303,19 @@ void Player::server_thread() {
             set_output_device(index);
             break;
           }
+          case 12: { //change volume. Desired input format: "12||newVolume"
+            Helper::get_instance().log(
+                "SOCKET: Received byte: 12 (Set volume)");
+            std::string volume = receivedStr.substr(4);
+            double newVolume;
+            try {
+              newVolume = std::stod(volume);
+            } catch(std::invalid_argument) {
+              Helper::get_instance().log("Error while setting volume! Can't cast \"" + volume + "\" to double.");
+            }
+            set_volume(newVolume);
+            break;
+          }
           default: {
             Helper::get_instance().log("SOCKET: Received unknown byte: " +
                                        std::to_string(operation_code));
@@ -352,6 +365,7 @@ void Player::send_info_to_clients() {
     current_info += "playing||" + std::to_string(get_is_playing()) + "||";
     current_info += "shuffle||" + std::to_string(get_shuffle()) + "||";
     current_info += "repeat||" + std::to_string(get_repeat()) + "||";
+    current_info += "volume||" + std::to_string(get_volume()) + "||";
     for (int client : clients) {
       ssize_t bytesSent =
           send(client, current_info.c_str(), current_info.size(), 0);
@@ -2882,7 +2896,7 @@ void Player::notify_observers_song_volume_changed() {
   for (auto observer : m_observers) {
     observer->on_song_volume_changed(m_song_volume);
   }
-  // send_info_to_clients();
+  send_info_to_clients();
 }
 
 void Player::notify_observers_song_position_changed() {
