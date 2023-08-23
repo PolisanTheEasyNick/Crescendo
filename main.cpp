@@ -22,6 +22,10 @@ void signalHandler(int signal) {
 void runNoGuiMode() {
   Helper::get_instance().log("Starting in no GUI mode.");
   Player player(false);
+  while(player.get_players().size() <= 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(5000));  // wait 5 sec
+  }
+  player.select_player(0);
   player.start_listening_signals();  // start listening signals
   // Run the application within the while loop
 #ifdef HAVE_DBUS
@@ -33,6 +37,7 @@ void runNoGuiMode() {
     player.update_position_thread();
 #endif
     if (!appRunning) {
+        Helper::get_instance().log("Stopping server");
       player.stop_server();
       break;
     }

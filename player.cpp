@@ -401,6 +401,11 @@ Player::Player(bool with_gui) {
     Helper::get_instance().log("Connected to D-Bus as \"" +
                                m_dbus_conn->getUniqueName() + "\".");
 #endif
+
+#ifdef HAVE_DBUS
+  start_server();
+#endif
+
   // get current players
   get_players();
   // if players size is not null
@@ -418,6 +423,26 @@ Player::Player(bool with_gui) {
         get_song_data();  // get song data from dbus if player is not local
       }
     };
+  } else {
+//    while(m_players.size() <= 0 || !serverRunning) {
+//    //no players found
+//    std::this_thread::sleep_for(
+//        std::chrono::milliseconds(5000));  // wait 5 sec
+//      get_players();
+//    }
+    if (m_players.size() > 0 && select_player(0)) {
+      if (m_players[m_selected_player_id].first == "Local") {
+        Helper::get_instance().log("Selected local player.");
+      } else {
+        Helper::get_instance().log(
+            "Selected player: " + m_players[m_selected_player_id].first +
+            " at " + m_players[m_selected_player_id].second);
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(500));  // wait 0.5 sec
+        get_song_data();  // get song data from dbus if player is not local
+      }
+    }
+
   }
 
 #ifdef SUPPORT_AUDIO_OUTPUT
@@ -430,10 +455,6 @@ Player::Player(bool with_gui) {
     std::cerr << "Mix_OpenAudio failed: " << Mix_GetError() << std::endl;
     exit(EXIT_FAILURE);
   }
-#endif
-
-#ifdef HAVE_DBUS
-  start_server();
 #endif
 }
 
