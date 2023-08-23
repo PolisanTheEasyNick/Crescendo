@@ -424,13 +424,13 @@ Player::Player(bool with_gui) {
       }
     };
   } else {
-    while(m_players.size() <= 0) {
-    //no players found
-    std::this_thread::sleep_for(
-        std::chrono::milliseconds(5000));  // wait 5 sec
-      get_players();
-    }
-    if (select_player(0)) {
+//    while(m_players.size() <= 0 || !serverRunning) {
+//    //no players found
+//    std::this_thread::sleep_for(
+//        std::chrono::milliseconds(5000));  // wait 5 sec
+//      get_players();
+//    }
+    if (m_players.size() > 0 && select_player(0)) {
       if (m_players[m_selected_player_id].first == "Local") {
         Helper::get_instance().log("Selected local player.");
       } else {
