@@ -46,7 +46,7 @@ $ make
 ```
 4. Run the application:
 ```bash
-$ ./Crescendo
+$ ./сrescendo
 ```
 
 ## Usage
