@@ -1352,7 +1352,7 @@ uint64_t Player::get_song_length() {
   auto metadata = get_metadata();  // get current metadata
   for (auto &info : metadata) {
     if (info.first == "mpris:length") {  // find length
-      int64_t length = stoi(info.second);
+      int64_t length = stol(info.second);
       if (m_players[m_selected_player_id].first !=
           "Local") {        // if player is not local
         length /= 1000000;  // then convert to seconds
@@ -2709,7 +2709,7 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
 
         for (auto &info : metadata) {
           if (info.first == "mpris:length") {  // get new length
-            int64_t length = stoi(info.second);
+            int64_t length = stol(info.second);
             length /= 1000000;
             if (m_song_length != length) {
               m_song_length = length;
@@ -2828,9 +2828,9 @@ void Player::get_song_data() {
   for (auto &info : metadata) {          // start parsing metadata
     if (info.first == "mpris:length") {  // find length
       Helper::get_instance().log("Got metadata length: " + info.second);
-      int64_t length = stoi(info.second);
+      int64_t length = stol(info.second);
       if (length == -1) length = 0;
-      Helper::get_instance().log("Stoi: " + std::to_string(length));
+      Helper::get_instance().log("Stol: " + std::to_string(length));
       if (get_current_player_name() != "Local") length /= 1000000;
       if (m_song_length != length) {
         m_song_length = length;
