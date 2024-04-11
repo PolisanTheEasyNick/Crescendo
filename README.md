@@ -3,10 +3,11 @@
 Crescendo is a music player controller that can retrieve information about a player via dbus in real-time, control it, and change the output sound device for this player using PulseAudio or PipeWire.
 
 ## Features
-* Real-time information retrieval for any player via dbus
+* Real-time information retrieval for any player via DBus
 * Control the player via dbus commands
 * Change the output sound device for the player via PulseAudio or PipeWire
 * Intuitive graphical user interface
+* Background service mode for accessing using Android client
 
 ## Dependencies:
 * C++17
