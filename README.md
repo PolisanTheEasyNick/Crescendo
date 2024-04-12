@@ -16,7 +16,7 @@ Crescendo is a music player controller that can retrieve information about a pla
 * PulseAudio or PipeWire (optional, you will not be able to change the output sound device for player)
 * [sdbus-c++](https://github.com/Kistler-Group/sdbus-cpp) (optional, without it you will not be able to control another players)
 * SDL2, SDL2_mixer, taglib (optional, you will not be able to use Crescendo as local player for audio files)
-* [Rohrkabel](https://github.com/Soundux/rohrkabel) (optional, if PipeWire found fill be fetched automatically)
+* [Rohrkabel](https://github.com/Curve/rohrkabelhttps://github.com/Curve/rohrkabel) (optional, if PipeWire found fill be fetched automatically)
 
 ## Installation
 To install Crescendo, follow these steps:
