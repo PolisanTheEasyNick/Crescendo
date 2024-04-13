@@ -7,10 +7,6 @@
 #include <unistd.h>
 
 #include <thread>
-
-#include "rohrkabel/spa/pod/object/body.hpp"
-#include "spa/pod/pod.h"
-
 /**
  * Converts bool to const char*
  *

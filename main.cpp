@@ -26,9 +26,10 @@ void runNoGuiMode() {
       std::this_thread::sleep_for(std::chrono::milliseconds(5000));  // wait 5 sec
   }
   player.select_player(0);
-  player.start_listening_signals();  // start listening signals
+
   // Run the application within the while loop
 #ifdef HAVE_DBUS
+  player.start_listening_signals();  // start listening signals
   Helper::get_instance().log("Current song: " + player.get_song_name() +
                              " by " + player.get_song_author());
 #endif
