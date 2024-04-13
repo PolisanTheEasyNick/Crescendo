@@ -22,12 +22,12 @@ inline const char *const bool_to_string(bool b) { return b ? "true" : "false"; }
 #ifdef HAVE_DBUS
 void Player::update_position_thread() {
   if (get_is_playing()) {
-    double current_pos = get_position();  // get current pos
+    double current_pos = get_position(); // get current pos
     Helper::get_instance().log("Current pos: " + std::to_string(current_pos) +
                                ", " + get_position_str());
   }
   send_info_to_clients();
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // wait 1 sec
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // wait 1 sec
 }
 #endif
 
@@ -51,8 +51,8 @@ void Player::server_thread() {
   sockaddr_in serverAddress{};
   serverAddress.sin_family = AF_INET;
   serverAddress.sin_addr.s_addr =
-      INADDR_ANY;                        // Listen on all network interfaces
-  serverAddress.sin_port = htons(4308);  // Port number
+      INADDR_ANY;                       // Listen on all network interfaces
+  serverAddress.sin_port = htons(4308); // Port number
 
   bool isBinded = false;
   while (!isBinded) {
@@ -62,9 +62,9 @@ void Player::server_thread() {
           "SOCKET: Failed to bind socket, trying again after 10 seconds...");
       // close(serverSocket);
       std::this_thread::sleep_for(
-          std::chrono::seconds(10));  // Wait for 10 seconds
+          std::chrono::seconds(10)); // Wait for 10 seconds
     } else {
-      isBinded = true;  // Socket is successfully bound, exit the loop
+      isBinded = true; // Socket is successfully bound, exit the loop
     }
   }
 
@@ -91,7 +91,7 @@ void Player::server_thread() {
       // pending
       if (errno == EWOULDBLOCK || errno == EAGAIN) {
         // Sleep for a short duration to avoid busy looping
-        usleep(1000);  // 1 millisecond
+        usleep(1000); // 1 millisecond
         continue;
       } else {
         Helper::get_instance().log(
@@ -108,7 +108,7 @@ void Player::server_thread() {
     while (serverRunning) {
       // Set up the timeout for recv()
       struct timeval timeout;
-      timeout.tv_sec = 2;  // Set the timeout value in seconds
+      timeout.tv_sec = 2; // Set the timeout value in seconds
       timeout.tv_usec = 0;
 
       fd_set readSet;
@@ -134,7 +134,8 @@ void Player::server_thread() {
 
       char received[2048] = {0};
       std::string receivedStr;
-      ssize_t bytesRead = recv(clientSocket, &received, sizeof(received) - 1, 0);
+      ssize_t bytesRead =
+          recv(clientSocket, &received, sizeof(received) - 1, 0);
       received[bytesRead] = '\0';
       receivedStr = std::string(received);
       memset(&(received[0]), 0, 2048);
@@ -156,171 +157,178 @@ void Player::server_thread() {
         // int received = ntohl(buffer);
         // received = ntohl(received);
         int operation_code = Helper::get_instance().getOPCode(receivedStr);
-        if(operation_code == 400 || operation_code == 40) operation_code = 4; //At startup in some reason receives "400" instead of "4"
+        if (operation_code == 400 || operation_code == 40)
+          operation_code =
+              4; // At startup in some reason receives "400" instead of "4"
         if (operation_code != 0)
-            Helper::get_instance().log("Received: " + receivedStr);
+          Helper::get_instance().log("Received: " + receivedStr);
         switch (operation_code) {
-          case 0: {
-            // std::cout << "Received byte: 0 (Testing connection)" <<
-            // std::endl;
-            break;
+        case 0: {
+          // std::cout << "Received byte: 0 (Testing connection)" <<
+          // std::endl;
+          break;
+        }
+        case 1: {
+          Helper::get_instance().log("SOCKET: Received byte: 1 (Previous)");
+          send_previous();
+          break;
+        }
+        case 2: {
+          Helper::get_instance().log("SOCKET: Received byte: 2 (PlayPause)");
+          send_play_pause();
+          break;
+        }
+        case 3: {
+          Helper::get_instance().log("SOCKET: Received byte: 3 (Next)");
+          send_next();
+          break;
+        }
+        case 4: {
+          Helper::get_instance().log("SOCKET: Received byte: 4 (Get)");
+          send_info_to_clients();
+          break;
+        }
+        case 5: {
+          Helper::get_instance().log(
+              "SOCKET: Received byte: 5 (Toggle Shuffle)");
+          set_shuffle(!get_shuffle());
+          break;
+        }
+        case 6: {
+          Helper::get_instance().log(
+              "SOCKET: Received byte: 6 (Toggle Repeat)");
+          int current_loop_status = get_repeat(); // get current loop status
+          if (current_loop_status + 1 == 3) {     // if it last status
+            set_repeat(0);                        // go to 0 status
+          } else {
+            set_repeat(current_loop_status + 1); // go to next status
           }
-          case 1: {
-            Helper::get_instance().log("SOCKET: Received byte: 1 (Previous)");
-            send_previous();
-            break;
-          }
-          case 2: {
-            Helper::get_instance().log("SOCKET: Received byte: 2 (PlayPause)");
-            send_play_pause();
-            break;
-          }
-          case 3: {
-            Helper::get_instance().log("SOCKET: Received byte: 3 (Next)");
-            send_next();
-            break;
-          }
-          case 4: {
-            Helper::get_instance().log("SOCKET: Received byte: 4 (Get)");
-            send_info_to_clients();
-            break;
-          }
-          case 5: {
+          break;
+        }
+        case 7: {
+          Helper::get_instance().log("SOCKET: Received byte: 7 (Set position)");
+          std::string digits = receivedStr.substr(3);
+          int newPos;
+          try {
+            newPos = std::stoi(digits);
+          } catch (std::invalid_argument) {
             Helper::get_instance().log(
-                "SOCKET: Received byte: 5 (Toggle Shuffle)");
-            set_shuffle(!get_shuffle());
-            break;
+                "Error while setting position! Can't cast \"" + digits +
+                "\" to int.");
           }
-          case 6: {
-            Helper::get_instance().log(
-                "SOCKET: Received byte: 6 (Toggle Repeat)");
-            int current_loop_status = get_repeat();  // get current loop status
-            if (current_loop_status + 1 == 3) {      // if it last status
-              set_repeat(0);                         // go to 0 status
+
+          Helper::get_instance().log("Fetched position " + digits);
+          set_position(newPos);
+          break;
+        }
+        case 8: { // Get players. Need to send status 8, count of players and
+                  // player:id pairs.
+          Helper::get_instance().log("SOCKET: Received byte: 8 (Get players)");
+
+          auto players = get_players();
+          uint64_t selected = get_current_player_index();
+          std::string result = "8||" + std::to_string(selected);
+          for (const auto &player : players) {
+            if (player.first == "Local")
+              result += "||" + player.first + "||Local";
+            else
+              result += "||" + player.first + "||" + player.second;
+          }
+          for (int client : clients) {
+            ssize_t bytesSent = send(client, result.c_str(), result.size(), 0);
+
+            if (bytesSent == -1) {
+              Helper::get_instance().log(
+                  "Failed to send message to the client " +
+                  std::to_string(client));
             } else {
-              set_repeat(current_loop_status + 1);  // go to next status
+              Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
+                                         " bytes to the client " +
+                                         std::to_string(client));
             }
-            break;
           }
-          case 7: {
+          break;
+        }
+        case 9: { // change player. Desired input format: "9||playerIndex"
+          Helper::get_instance().log("SOCKET: Received byte: 9 (Set player)");
+          // Find the position of "9||" in the input string
+          std::string playerID = receivedStr.substr(3);
+          uint64_t index;
+          try {
+            index = std::stoi(playerID);
+          } catch (std::invalid_argument) {
             Helper::get_instance().log(
-                "SOCKET: Received byte: 7 (Set position)");
-            std::string digits = receivedStr.substr(3);
-            int newPos;
-            try {
-              newPos = std::stoi(digits);
-            } catch(std::invalid_argument) {
-              Helper::get_instance().log("Error while setting position! Can't cast \"" + digits + "\" to int.");
-            }
+                "Error while setting player! Can't cast \"" + playerID +
+                "\" to int.");
+          }
+          select_player(index);
+          if (m_players[index].first == "Local") {
+            notify_observers_player_choosed(true);
+          } else
+            notify_observers_player_choosed(false);
+          break;
+        }
+        case 10: {
+          // get list of output devices: devicename||sinkid
+          Helper::get_instance().log(
+              "SOCKET: Received byte: 10 (Get output devices)");
+          auto devices = get_output_devices();
+          uint64_t selected = get_current_device_sink_index();
+          std::string result = "9||" + std::to_string(selected);
+          for (const auto &device : devices) {
+            result +=
+                "||" + device.first + "||" + std::to_string(device.second);
+          }
+          for (int client : clients) {
+            ssize_t bytesSent = send(client, result.c_str(), result.size(), 0);
 
-            Helper::get_instance().log("Fetched position " + digits);
-            set_position(newPos);
-            break;
+            if (bytesSent == -1) {
+              Helper::get_instance().log(
+                  "Failed to send message to the client " +
+                  std::to_string(client));
+            } else {
+              Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
+                                         " bytes to the client " +
+                                         std::to_string(client));
+            }
           }
-          case 8: {  // Get players. Need to send status 8, count of players and
-                     // player:id pairs.
+          break;
+        }
+        case 11: { // change output device. Desired input format:
+                   // "11||sinkIndex"
+          Helper::get_instance().log(
+              "SOCKET: Received byte: 11 (Set output device)");
+          std::string deviceID = receivedStr.substr(4);
+          uint64_t index;
+          try {
+            index = std::stoi(deviceID);
+          } catch (std::invalid_argument) {
             Helper::get_instance().log(
-                "SOCKET: Received byte: 8 (Get players)");
-
-            auto players = get_players();
-            uint64_t selected = get_current_player_index();
-            std::string result = "8||" + std::to_string(selected);
-            for (const auto &player : players) {
-              if (player.first == "Local")
-                result += "||" + player.first + "||Local";
-              else
-                result += "||" + player.first + "||" + player.second;
-            }
-            for (int client : clients) {
-              ssize_t bytesSent =
-                  send(client, result.c_str(), result.size(), 0);
-
-              if (bytesSent == -1) {
-                Helper::get_instance().log(
-                    "Failed to send message to the client " +
-                    std::to_string(client));
-              } else {
-                Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
-                                           " bytes to the client " +
-                                           std::to_string(client));
-              }
-            }
-            break;
+                "Error while setting output device! Can't cast \"" + deviceID +
+                "\" to int.");
           }
-          case 9: { //change player. Desired input format: "9||playerIndex"
+          set_output_device(index);
+          break;
+        }
+        case 12: { // change volume. Desired input format: "12||newVolume"
+          Helper::get_instance().log("SOCKET: Received byte: 12 (Set volume)");
+          std::string volume = receivedStr.substr(4);
+          double newVolume;
+          try {
+            newVolume = std::stod(volume);
+          } catch (std::invalid_argument) {
             Helper::get_instance().log(
-                "SOCKET: Received byte: 9 (Set player)");
-            // Find the position of "9||" in the input string
-            std::string playerID = receivedStr.substr(3);
-            uint64_t index;
-            try {
-              index = std::stoi(playerID);
-            } catch(std::invalid_argument) {
-              Helper::get_instance().log("Error while setting player! Can't cast \"" + playerID + "\" to int.");
-            }
-            select_player(index);
-            if(m_players[index].first == "Local") {
-              notify_observers_player_choosed(true);
-            } else notify_observers_player_choosed(false);
-            break;
+                "Error while setting volume! Can't cast \"" + volume +
+                "\" to double.");
           }
-          case 10: {
-            //get list of output devices: devicename||sinkid
-            Helper::get_instance().log(
-                "SOCKET: Received byte: 10 (Get output devices)");
-            auto devices = get_output_devices();
-            uint64_t selected = get_current_device_sink_index();
-            std::string result = "9||" + std::to_string(selected);
-            for (const auto &device : devices) {
-              result += "||" + device.first + "||" + std::to_string(device.second);
-            }
-            for (int client : clients) {
-              ssize_t bytesSent =
-                  send(client, result.c_str(), result.size(), 0);
-
-              if (bytesSent == -1) {
-                Helper::get_instance().log(
-                    "Failed to send message to the client " +
-                    std::to_string(client));
-              } else {
-                Helper::get_instance().log("Sent " + std::to_string(bytesSent) +
-                                           " bytes to the client " +
-                                           std::to_string(client));
-              }
-            }
-            break;
-          }
-          case 11: { //change output device. Desired input format: "11||sinkIndex"
-            Helper::get_instance().log(
-                "SOCKET: Received byte: 11 (Set output device)");
-            std::string deviceID = receivedStr.substr(4);
-            uint64_t index;
-            try {
-              index = std::stoi(deviceID);
-            } catch(std::invalid_argument) {
-              Helper::get_instance().log("Error while setting output device! Can't cast \"" + deviceID + "\" to int.");
-            }
-            set_output_device(index);
-            break;
-          }
-          case 12: { //change volume. Desired input format: "12||newVolume"
-            Helper::get_instance().log(
-                "SOCKET: Received byte: 12 (Set volume)");
-            std::string volume = receivedStr.substr(4);
-            double newVolume;
-            try {
-              newVolume = std::stod(volume);
-            } catch(std::invalid_argument) {
-              Helper::get_instance().log("Error while setting volume! Can't cast \"" + volume + "\" to double.");
-            }
-            set_volume(newVolume);
-            break;
-          }
-          default: {
-            Helper::get_instance().log("SOCKET: Received unknown byte: " +
-                                       std::to_string(operation_code));
-            break;
-          }
+          set_volume(newVolume);
+          break;
+        }
+        default: {
+          Helper::get_instance().log("SOCKET: Received unknown byte: " +
+                                     std::to_string(operation_code));
+          break;
+        }
         }
       }
     }
@@ -356,9 +364,11 @@ void Player::send_info_to_clients() {
       }
     }
     std::string length = get_song_length_str();
-    if (length == "") length = "0:00";
+    if (length == "")
+      length = "0:00";
     std::string position = get_position_str();
-    if (position == "") position = "0:00";
+    if (position == "")
+      position = "0:00";
 
     current_info += "length||" + length + "||";
     current_info += "pos||" + position + "||";
@@ -396,8 +406,8 @@ Player::Player(bool with_gui) {
 #ifdef HAVE_DBUS
   // create dbus connection
   m_dbus_conn = sdbus::createSessionBusConnection();
-  if (m_dbus_conn)  // check connection and print info about connection on
-                    // success
+  if (m_dbus_conn) // check connection and print info about connection on
+                   // success
     Helper::get_instance().log("Connected to D-Bus as \"" +
                                m_dbus_conn->getUniqueName() + "\".");
 #endif
@@ -419,17 +429,17 @@ Player::Player(bool with_gui) {
             "Selected player: " + m_players[m_selected_player_id].first +
             " at " + m_players[m_selected_player_id].second);
         std::this_thread::sleep_for(
-            std::chrono::milliseconds(500));  // wait 0.5 sec
-        get_song_data();  // get song data from dbus if player is not local
+            std::chrono::milliseconds(500)); // wait 0.5 sec
+        get_song_data(); // get song data from dbus if player is not local
       }
     };
   } else {
-//    while(m_players.size() <= 0 || !serverRunning) {
-//    //no players found
-//    std::this_thread::sleep_for(
-//        std::chrono::milliseconds(5000));  // wait 5 sec
-//      get_players();
-//    }
+    //    while(m_players.size() <= 0 || !serverRunning) {
+    //    //no players found
+    //    std::this_thread::sleep_for(
+    //        std::chrono::milliseconds(5000));  // wait 5 sec
+    //      get_players();
+    //    }
     if (m_players.size() > 0 && select_player(0)) {
       if (m_players[m_selected_player_id].first == "Local") {
         Helper::get_instance().log("Selected local player.");
@@ -438,11 +448,10 @@ Player::Player(bool with_gui) {
             "Selected player: " + m_players[m_selected_player_id].first +
             " at " + m_players[m_selected_player_id].second);
         std::this_thread::sleep_for(
-            std::chrono::milliseconds(500));  // wait 0.5 sec
-        get_song_data();  // get song data from dbus if player is not local
+            std::chrono::milliseconds(500)); // wait 0.5 sec
+        get_song_data(); // get song data from dbus if player is not local
       }
     }
-
   }
 
 #ifdef SUPPORT_AUDIO_OUTPUT
@@ -474,10 +483,11 @@ Player::~Player() {
 }
 
 std::vector<std::pair<std::string, std::string>> Player::get_players() {
-  m_players.clear();  // clear m_players vector
+  m_players.clear(); // clear m_players vector
 #ifdef SUPPORT_AUDIO_OUTPUT
   // if we can play local audio, then add local player
-  if (m_with_gui) m_players.push_back(std::make_pair("Local", ""));
+  if (m_with_gui)
+    m_players.push_back(std::make_pair("Local", ""));
 #endif
 #ifdef HAVE_DBUS
   if (!m_dbus_conn) {
@@ -487,14 +497,14 @@ std::vector<std::pair<std::string, std::string>> Player::get_players() {
     // added
     return m_players;
   }
-  std::vector<std::string> result_of_call;  // vector of all ListNames of Dbus
+  std::vector<std::string> result_of_call; // vector of all ListNames of Dbus
   try {
     // creating proxy for getting ListNames
     auto proxy = sdbus::createProxy(*m_dbus_conn.get(), "org.freedesktop.DBus",
                                     "/org/freedesktop/DBus");
     proxy->callMethod("ListNames")
         .onInterface("org.freedesktop.DBus")
-        .storeResultsTo(result_of_call);  // and storing inside vector
+        .storeResultsTo(result_of_call); // and storing inside vector
   } catch (const sdbus::Error &e) {
     // if error - print it
     Helper::get_instance().log(
@@ -503,43 +513,43 @@ std::vector<std::pair<std::string, std::string>> Player::get_players() {
   }
 
   Helper::get_instance().log("Started checking for players");
-  if (result_of_call.empty()) {  // if vector empty - stop parsing
+  if (result_of_call.empty()) { // if vector empty - stop parsing
     Helper::get_instance().log("Error getting reply.");
     return m_players;
   } else {
     Helper::get_instance().log("Got reply from DBus");
     int num_names = 0;
-    for (const auto &name : result_of_call) {  // check every name
+    for (const auto &name : result_of_call) { // check every name
       if (strstr(name.c_str(), "org.mpris.MediaPlayer2.") ==
-          name.c_str()) {  // if it implements org.mpris.MediaPlayer2
+          name.c_str()) { // if it implements org.mpris.MediaPlayer2
         Helper::get_instance().log("Found media player: " +
-                                   name);  // print that we found media player
-        std::string identity;  // string for saving name of this player
+                                   name); // print that we found media player
+        std::string identity; // string for saving name of this player
         try {
-          auto proxy = sdbus::createProxy(
-              *m_dbus_conn.get(), name,
-              "/org/mpris/MediaPlayer2");  // create new proxy
+          auto proxy =
+              sdbus::createProxy(*m_dbus_conn.get(), name,
+                                 "/org/mpris/MediaPlayer2"); // create new proxy
           sdbus::Variant v_identity;
           proxy->callMethod("Get")
               .onInterface("org.freedesktop.DBus.Properties")
               .withArguments("org.mpris.MediaPlayer2",
-                             "Identity")  // get identity of new player
+                             "Identity") // get identity of new player
               .storeResultsTo(
-                  v_identity);  // save it into identity variant variable
+                  v_identity); // save it into identity variant variable
           identity =
-              v_identity.get<std::string>();  // parse std::string from variable
+              v_identity.get<std::string>(); // parse std::string from variable
         } catch (const sdbus::Error &e) {
           Helper::get_instance().log(
               std::string("Error while getting Identity: ") +
-              e.what());  // if error while getting player name
+              e.what()); // if error while getting player name
           m_players.push_back(std::make_pair(
-              "Player", name));  // then just add interface with "Player" name
+              "Player", name)); // then just add interface with "Player" name
           return m_players;
         }
         Helper::get_instance().log("Identity: " +
-                                   identity);  // print identity of player
+                                   identity); // print identity of player
         m_players.push_back(std::make_pair(
-            identity, name));  // add name and interface to m_players vector
+            identity, name)); // add name and interface to m_players vector
       }
     }
   }
@@ -572,15 +582,15 @@ bool Player::select_player(unsigned int new_id) {
     return false;
   }
 #endif
-  get_players();  // get list of currently accessible players
-  if (new_id < 0 || new_id > m_players.size()) {  // if new_id out of bounds
+  get_players(); // get list of currently accessible players
+  if (new_id < 0 || new_id > m_players.size()) { // if new_id out of bounds
     Helper::get_instance().log("This player does not exists!");
-    return false;  // cancel operation
+    return false; // cancel operation
   }
 
-  m_selected_player_id = new_id;  // set new player
+  m_selected_player_id = new_id; // set new player
 #ifdef SUPPORT_AUDIO_OUTPUT
-  if (m_players[m_selected_player_id].first == "Local") {  // if it is local
+  if (m_players[m_selected_player_id].first == "Local") { // if it is local
     // then just say that all methods and properties are supported
     m_play_pause_method = true;
     m_pause_method = true;
@@ -607,17 +617,17 @@ bool Player::select_player(unsigned int new_id) {
 #endif
 #ifdef HAVE_DBUS
   std::string
-      xml_introspect;  // string, which will contain xml of all interfaces,
-                       // properties and methods of out player
+      xml_introspect; // string, which will contain xml of all interfaces,
+                      // properties and methods of out player
   try {
     auto proxy = sdbus::createProxy(*m_dbus_conn.get(),
                                     m_players[m_selected_player_id].second,
                                     "/org/mpris/MediaPlayer2");
 
     proxy
-        ->callMethod("Introspect")  // call introspect method
+        ->callMethod("Introspect") // call introspect method
         .onInterface("org.freedesktop.DBus.Introspectable")
-        .storeResultsTo(xml_introspect);  // and store info in xml_introspect
+        .storeResultsTo(xml_introspect); // and store info in xml_introspect
   } catch (const sdbus::Error &e) {
     Helper::get_instance().log(
         std::string("Error while trying to get all functions for player: ") +
@@ -821,18 +831,17 @@ bool Player::send_play_pause() {
     return false;
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
-  if (m_players[m_selected_player_id].first == "Local") {  // if local player
-    if (Mix_PlayingMusic() &&
-        Mix_PausedMusic()) {  // if music opened and paused
-      play_audio();           // just play
+  if (m_players[m_selected_player_id].first == "Local") { // if local player
+    if (Mix_PlayingMusic() && Mix_PausedMusic()) { // if music opened and paused
+      play_audio();                                // just play
     } else if (Mix_PlayingMusic() &&
-               !Mix_PausedMusic()) {  // if opened and playing
-      pause_audio();                  // just pause
-    } else {                          // in any other variant
+               !Mix_PausedMusic()) { // if opened and playing
+      pause_audio();                 // just pause
+    } else {                         // in any other variant
       Helper::get_instance().log("Starting playing");
-      play_audio();  // just play
+      play_audio(); // just play
     }
-    return true;  // success
+    return true; // success
   }
 #endif
 #ifdef HAVE_DBUS
@@ -852,7 +861,7 @@ bool Player::send_play_pause() {
                                     "/org/mpris/MediaPlayer2");
 
     proxy
-        ->callMethod("PlayPause")  // call PlayPause method
+        ->callMethod("PlayPause") // call PlayPause method
         .onInterface("org.mpris.MediaPlayer2.Player")
         .dontExpectReply();
     return true;
@@ -872,7 +881,7 @@ bool Player::send_pause() {
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    pause_audio();  // if local player then just pause audio
+    pause_audio(); // if local player then just pause audio
     return true;
   }
 #endif
@@ -893,7 +902,7 @@ bool Player::send_pause() {
                                     "/org/mpris/MediaPlayer2");
 
     proxy
-        ->callMethod("Pause")  // call Pause method to DBus
+        ->callMethod("Pause") // call Pause method to DBus
         .onInterface("org.mpris.MediaPlayer2.Player")
         .dontExpectReply();
     return true;
@@ -912,7 +921,7 @@ bool Player::send_play() {
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    play_audio();  // if local player then just play
+    play_audio(); // if local player then just play
     return true;
   }
 #endif
@@ -933,7 +942,7 @@ bool Player::send_play() {
                                     "/org/mpris/MediaPlayer2");
 
     proxy
-        ->callMethod("Play")  // call Play method to DBus
+        ->callMethod("Play") // call Play method to DBus
         .onInterface("org.mpris.MediaPlayer2.Player")
         .dontExpectReply();
     return true;
@@ -968,7 +977,7 @@ bool Player::send_next() {
                                     "/org/mpris/MediaPlayer2");
 
     proxy
-        ->callMethod("Next")  // call Next method to DBus
+        ->callMethod("Next") // call Next method to DBus
         .onInterface("org.mpris.MediaPlayer2.Player")
         .dontExpectReply();
     return true;
@@ -1003,7 +1012,7 @@ bool Player::send_previous() {
                                     "/org/mpris/MediaPlayer2");
 
     proxy
-        ->callMethod("Previous")  // call Previous method to DBus
+        ->callMethod("Previous") // call Previous method to DBus
         .onInterface("org.mpris.MediaPlayer2.Player")
         .dontExpectReply();
     return true;
@@ -1019,7 +1028,7 @@ bool Player::send_previous() {
 bool Player::get_shuffle() {
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    return m_is_shuffle;  // if local player then just return variable
+    return m_is_shuffle; // if local player then just return variable
   }
 #endif
   if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
@@ -1050,11 +1059,11 @@ bool Player::get_shuffle() {
     proxy->callMethod("Get")
         .onInterface("org.freedesktop.DBus.Properties")
         .withArguments("org.mpris.MediaPlayer2.Player",
-                       "Shuffle")            // get Shuffle property from DBus
-        .storeResultsTo(current_shuffle_v);  // save it
+                       "Shuffle")           // get Shuffle property from DBus
+        .storeResultsTo(current_shuffle_v); // save it
     bool current_shuffle =
-        current_shuffle_v.get<bool>();  // parse variant into bool
-    return current_shuffle;             // return Shuffle property
+        current_shuffle_v.get<bool>(); // parse variant into bool
+    return current_shuffle;            // return Shuffle property
   } catch (const sdbus::Error &e) {
     Helper::get_instance().log(
         std::string("Error while trying to get Shuffle property: ") + e.what());
@@ -1072,8 +1081,8 @@ bool Player::set_shuffle(bool isShuffle) {
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
     if (m_is_shuffle != isShuffle) {
-      m_is_shuffle = isShuffle;  // if local player then just set variable
-      notify_observers_is_shuffle_changed();  // and notify that shuffle changed
+      m_is_shuffle = isShuffle; // if local player then just set variable
+      notify_observers_is_shuffle_changed(); // and notify that shuffle changed
     }
     return true;
   }
@@ -1089,7 +1098,7 @@ bool Player::set_shuffle(bool isShuffle) {
               << std::endl;
     return false;
   }
-  bool current_shuffle = get_shuffle();  // for DBus get current shuffle status
+  bool current_shuffle = get_shuffle(); // for DBus get current shuffle status
   try {
     auto proxy = sdbus::createProxy(*m_dbus_conn.get(),
                                     m_players[m_selected_player_id].second,
@@ -1099,7 +1108,7 @@ bool Player::set_shuffle(bool isShuffle) {
         .onInterface("org.freedesktop.DBus.Properties")
         .withArguments(
             "org.mpris.MediaPlayer2.Player", "Shuffle",
-            sdbus::Variant(!current_shuffle))  // and set opposite from Shuffle
+            sdbus::Variant(!current_shuffle)) // and set opposite from Shuffle
         .dontExpectReply();
     return true;
   } catch (const sdbus::Error &e) {
@@ -1114,7 +1123,7 @@ bool Player::set_shuffle(bool isShuffle) {
 int Player::get_repeat() {
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    return m_repeat;  // if local then just return variable
+    return m_repeat; // if local then just return variable
   }
 #endif
   if (m_selected_player_id < 0 || m_selected_player_id > m_players.size()) {
@@ -1145,12 +1154,12 @@ int Player::get_repeat() {
     proxy->callMethod("Get")
         .onInterface("org.freedesktop.DBus.Properties")
         .withArguments("org.mpris.MediaPlayer2.Player",
-                       "LoopStatus")  // if DBus player then get LoopStatus
-                                      // property of current player
+                       "LoopStatus") // if DBus player then get LoopStatus
+                                     // property of current player
         .storeResultsTo(current_loop_v);
     std::string current_shuffle = current_loop_v.get<std::string>();
     int res = -1;
-    if (current_shuffle == "None") {  // translate it into int
+    if (current_shuffle == "None") { // translate it into int
       res = 0;
     } else if (current_shuffle == "Playlist") {
       res = 1;
@@ -1176,9 +1185,9 @@ bool Player::set_repeat(int new_repeat = -1) {
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
     if (m_repeat != new_repeat) {
-      m_repeat = new_repeat;  // if local player then just set variable
-      notify_observers_loop_status_changed();  // and notify that variable
-                                               // changed
+      m_repeat = new_repeat; // if local player then just set variable
+      notify_observers_loop_status_changed(); // and notify that variable
+                                              // changed
     }
     return true;
   }
@@ -1194,11 +1203,11 @@ bool Player::set_repeat(int new_repeat = -1) {
               << std::endl;
     return false;
   }
-  try {  // if dbus player selected
+  try { // if dbus player selected
     auto proxy = sdbus::createProxy(*m_dbus_conn.get(),
                                     m_players[m_selected_player_id].second,
-                                    "/org/mpris/MediaPlayer2");  // create proxy
-    std::string loop_to_set;  // parse from int status to DBus's string status
+                                    "/org/mpris/MediaPlayer2"); // create proxy
+    std::string loop_to_set; // parse from int status to DBus's string status
     if (new_repeat == -1 || new_repeat == 0) {
       loop_to_set = "None";
     } else if (new_repeat == 1) {
@@ -1212,12 +1221,12 @@ bool Player::set_repeat(int new_repeat = -1) {
         .onInterface("org.freedesktop.DBus.Properties")
         .withArguments(
             "org.mpris.MediaPlayer2.Player", "LoopStatus",
-            sdbus::Variant(loop_to_set))  // set new LoopStatus property
+            sdbus::Variant(loop_to_set)) // set new LoopStatus property
         .dontExpectReply();
     if (m_repeat != new_repeat) {
-      m_repeat = new_repeat;                   // set variable
-      notify_observers_loop_status_changed();  // and notify that variable
-                                               // changed
+      m_repeat = new_repeat;                  // set variable
+      notify_observers_loop_status_changed(); // and notify that variable
+                                              // changed
     }
     return true;
   } catch (const sdbus::Error &e) {
@@ -1264,14 +1273,15 @@ int64_t Player::get_position() {
     sdbus::Variant position_v;
     int64_t position;
     proxy
-        ->callMethod("Get")  // if dbus player then
+        ->callMethod("Get") // if dbus player then
         .onInterface("org.freedesktop.DBus.Properties")
         .withArguments("org.mpris.MediaPlayer2.Player",
-                       "Position")  // get Position property
+                       "Position") // get Position property
         .storeResultsTo(position_v);
     position = position_v.get<int64_t>();
-    if (position < 0) return 0;
-    return position / 1000000;  // convert it into seconds and return
+    if (position < 0)
+      return 0;
+    return position / 1000000; // convert it into seconds and return
   } catch (const sdbus::Error &e) {
     Helper::get_instance().log(
         std::string("Error while trying to get Position property: ") +
@@ -1284,7 +1294,7 @@ int64_t Player::get_position() {
 
 std::string Player::get_position_str() {
   return Helper::get_instance().format_time(
-      get_position());  // return formatted current position
+      get_position()); // return formatted current position
 }
 
 bool Player::set_position(int64_t pos) {
@@ -1295,12 +1305,12 @@ bool Player::set_position(int64_t pos) {
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
     int res =
-        Mix_SetMusicPosition(pos);  // if local player then set position via SDL
+        Mix_SetMusicPosition(pos); // if local player then set position via SDL
     return res == 0;
   }
 #endif
 #ifdef HAVE_DBUS
-  if (get_current_player_name() != "Local") {  // if not local player
+  if (get_current_player_name() != "Local") { // if not local player
     pos *= 1000000;
   }
 
@@ -1317,19 +1327,19 @@ bool Player::set_position(int64_t pos) {
   try {
     auto proxy = sdbus::createProxy(*m_dbus_conn.get(),
                                     m_players[m_selected_player_id].second,
-                                    "/org/mpris/MediaPlayer2");  // create proxy
-    auto meta = get_metadata();                                  // get metadata
+                                    "/org/mpris/MediaPlayer2"); // create proxy
+    auto meta = get_metadata();                                 // get metadata
     sdbus::ObjectPath trackid;
     for (auto &info : meta) {
-      if (info.first == "mpris:trackid") {  // parse current trackid
+      if (info.first == "mpris:trackid") { // parse current trackid
         trackid = info.second;
         break;
       }
     }
     auto call =
         proxy->createMethodCall("org.mpris.MediaPlayer2.Player",
-                                "SetPosition");  // call method SetPosition
-    call << trackid << pos;  // for current trackid and position
+                                "SetPosition"); // call method SetPosition
+    call << trackid << pos; // for current trackid and position
     call.dontExpectReply();
     call.send(100);
 
@@ -1346,19 +1356,19 @@ bool Player::set_position(int64_t pos) {
 uint64_t Player::get_song_length() {
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    return m_song_length;  // if local player then just get song length variable
+    return m_song_length; // if local player then just get song length variable
   }
 #endif
-  auto metadata = get_metadata();  // get current metadata
+  auto metadata = get_metadata(); // get current metadata
   for (auto &info : metadata) {
-    if (info.first == "mpris:length") {  // find length
+    if (info.first == "mpris:length") { // find length
       int64_t length = stol(info.second);
       if (m_players[m_selected_player_id].first !=
-          "Local") {        // if player is not local
-        length /= 1000000;  // then convert to seconds
+          "Local") {       // if player is not local
+        length /= 1000000; // then convert to seconds
       }
       if (length > 0)
-        return length;  // and return length
+        return length; // and return length
       else
         return 0;
     }
@@ -1373,10 +1383,10 @@ double Player::get_volume() {
     return 0;
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
-  if (m_players[m_selected_player_id].first == "Local") {  // if local player
+  if (m_players[m_selected_player_id].first == "Local") { // if local player
     return Mix_GetMusicVolume(m_current_music) /
-           128;  // then get current volume and divide by 128 because max volume
-                 // in SDL is 128 but we work with 0-1 values
+           128; // then get current volume and divide by 128 because max volume
+                // in SDL is 128 but we work with 0-1 values
   }
 #endif
 #ifdef HAVE_DBUS
@@ -1399,10 +1409,10 @@ double Player::get_volume() {
     proxy->callMethod("Get")
         .onInterface("org.freedesktop.DBus.Properties")
         .withArguments("org.mpris.MediaPlayer2.Player",
-                       "Volume")  // if dbus player, then get Volume property
+                       "Volume") // if dbus player, then get Volume property
         .storeResultsTo(volume_v);
-    volume = volume_v.get<double>();  // parse from variant
-    return volume;                    // and return volume
+    volume = volume_v.get<double>(); // parse from variant
+    return volume;                   // and return volume
   } catch (const sdbus::Error &e) {
     Helper::get_instance().log(
         std::string("Error while trying to get Volume property: ") + e.what());
@@ -1419,9 +1429,9 @@ bool Player::set_volume(double volume) {
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    int newVolume = 128 * volume;  // if local player then convert from 0-1 to
-                                   // SDL's 0-128 volume format
-    Mix_VolumeMusic(newVolume);    // set new volume via SDL
+    int newVolume = 128 * volume; // if local player then convert from 0-1 to
+                                  // SDL's 0-128 volume format
+    Mix_VolumeMusic(newVolume);   // set new volume via SDL
     return true;
   }
 #endif
@@ -1451,7 +1461,7 @@ bool Player::set_volume(double volume) {
         .withArguments(
             "org.mpris.MediaPlayer2.Player", "Volume",
             sdbus::Variant(
-                volume))  // if Dbus player, then just set Volume property
+                volume)) // if Dbus player, then just set Volume property
         .dontExpectReply();
     return true;
   } catch (const sdbus::Error &e) {
@@ -1470,9 +1480,9 @@ bool Player::get_playback_status() {
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    return Mix_PlayingMusic() &&  // if local player return whether song opened
-                                  // and
-           !Mix_PausedMusic();    // not paused
+    return Mix_PlayingMusic() && // if local player return whether song opened
+                                 // and
+           !Mix_PausedMusic();   // not paused
   }
 #endif
 #ifdef HAVE_DBUS
@@ -1488,7 +1498,7 @@ bool Player::get_playback_status() {
   }
 
   std::string playback_str;
-  try {  // if dbus player
+  try { // if dbus player
     auto proxy = sdbus::createProxy(*m_dbus_conn.get(),
                                     m_players[m_selected_player_id].second,
                                     "/org/mpris/MediaPlayer2");
@@ -1496,10 +1506,10 @@ bool Player::get_playback_status() {
     proxy->callMethod("Get")
         .onInterface("org.freedesktop.DBus.Properties")
         .withArguments("org.mpris.MediaPlayer2.Player",
-                       "PlaybackStatus")  // get current PlaybackStatus property
-        .storeResultsTo(playback_v);      // save it
-    playback_str = playback_v.get<std::string>();  // parse it
-    return "Playing" == playback_str;  // and return whether it is "Playing"
+                       "PlaybackStatus") // get current PlaybackStatus property
+        .storeResultsTo(playback_v);     // save it
+    playback_str = playback_v.get<std::string>(); // parse it
+    return "Playing" == playback_str; // and return whether it is "Playing"
   } catch (const sdbus::Error &e) {
     Helper::get_instance().log("Error while trying to set PlayBack property: ");
     return false;
@@ -1508,11 +1518,10 @@ bool Player::get_playback_status() {
   return false;
 }
 
-uint64_t Player::get_current_player_index()
-{
+uint64_t Player::get_current_player_index() {
   std::string current_player_name = get_current_player_name();
-  for(int i = 0; i < m_players.size(); i++) {
-    if(m_players[i].first == current_player_name) {
+  for (int i = 0; i < m_players.size(); i++) {
+    if (m_players[i].first == current_player_name) {
       return i;
     }
   }
@@ -1526,11 +1535,11 @@ std::string Player::get_current_player_name() {
   }
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first ==
-      "Local") {     // if current player is local
-    return "Local";  // then return Local
+      "Local") {    // if current player is local
+    return "Local"; // then return Local
   }
 #endif
-#ifdef HAVE_DBUS  // if dbus player
+#ifdef HAVE_DBUS // if dbus player
   if (!m_dbus_conn) {
     Helper::get_instance().log(
         "Not connected to DBus, can't get Identity. Aborting.");
@@ -1544,9 +1553,9 @@ std::string Player::get_current_player_name() {
     proxy->callMethod("Get")
         .onInterface("org.freedesktop.DBus.Properties")
         .withArguments("org.mpris.MediaPlayer2", "Identity")
-        .storeResultsTo(v_identity);  // get identity again
+        .storeResultsTo(v_identity); // get identity again
     std::string identity = v_identity.get<std::string>();
-    return identity;  // and return it
+    return identity; // and return it
   } catch (const sdbus::Error &e) {
     Helper::get_instance().log(
         std::string("Error while getting current player name: ") + e.what());
@@ -1575,7 +1584,7 @@ unsigned short Player::get_current_device_sink_index() {
   static uint32_t proc_id = 0;
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (m_players[m_selected_player_id].first == "Local") {
-    proc_id = getpid();  // if local player then just get current process pid
+    proc_id = getpid(); // if local player then just get current process pid
   }
 #endif
 #ifdef HAVE_DBUS
@@ -1589,11 +1598,11 @@ unsigned short Player::get_current_device_sink_index() {
       auto proxy = sdbus::createProxy(
           *m_dbus_conn.get(), "org.freedesktop.DBus", "/org/freedesktop/DBus");
       proxy
-          ->callMethod("GetConnectionUnixProcessID")  // get process id
+          ->callMethod("GetConnectionUnixProcessID") // get process id
           .onInterface("org.freedesktop.DBus")
           .withArguments(m_players[m_selected_player_id]
-                             .second)  // for our player interface
-          .storeResultsTo(proc_id);    // and save it
+                             .second) // for our player interface
+          .storeResultsTo(proc_id);   // and save it
     } catch (const sdbus::Error &e) {
       Helper::get_instance().log(
           std::string("Error while getting current device process id: ") +
@@ -1602,7 +1611,7 @@ unsigned short Player::get_current_device_sink_index() {
     }
   }
 #endif
-  static int player_sink_id = -1;  //-1 means not found
+  static int player_sink_id = -1; //-1 means not found
 
 #ifdef HAVE_PULSEAUDIO
   // Create a main loop object
@@ -1662,10 +1671,10 @@ unsigned short Player::get_current_device_sink_index() {
                                      player_proc_id_str);
           if (strcmp(pa_proplist_gets(
                          info->proplist,
-                         "application.process.id"),  // if found same process id
+                         "application.process.id"), // if found same process id
                      player_proc_id_str) == 0 ||
               strcmp(pa_proplist_gets(info->proplist, "application.name"),
-                     player_name.c_str()) == 0)  // or same binary name
+                     player_name.c_str()) == 0) // or same binary name
           {
             Helper::get_instance().log(
                 "Found current player output sink: " + player_name + ". #" +
@@ -1691,11 +1700,11 @@ unsigned short Player::get_current_device_sink_index() {
 #endif
 
 #if HAVE_PIPEWIRE
-  auto main_loop = pipewire::main_loop();
-  auto context = pipewire::context(main_loop);
-  auto core = pipewire::core(context);
-  auto reg = pipewire::registry(core);
-  auto reg_listener = reg.listen<pipewire::registry_listener>();
+  auto main_loop = pipewire::main_loop::create();
+  auto context = pipewire::context::create(main_loop);
+  auto core = context->core();
+  auto reg = core->registry();
+  auto reg_listener = reg->listen();
   struct node_my {
     uint32_t node_id;
     uint32_t client_id;
@@ -1716,7 +1725,7 @@ unsigned short Player::get_current_device_sink_index() {
   reg_listener.on<pipewire::registry_event::global>(
       [&](const pipewire::global &global) {
         if (global.type == pipewire::node::type) {
-          auto node = reg.bind<pipewire::node>(global.id).get();
+          auto node = reg->bind<pipewire::node>(global.id).get();
           auto info = node->info();
           node_my node_to_add;
           node_to_add.node_id = info.id;
@@ -1746,7 +1755,7 @@ unsigned short Player::get_current_device_sink_index() {
           links.push_back(link);
         }
       });
-  core.update();
+  core->update();
   uint32_t current_node_id = -1;
   for (const auto &node : nodes) {
     if (node.proc_id == proc_id && node.media_class == "Stream/Output/Audio") {
@@ -1768,7 +1777,7 @@ unsigned short Player::get_current_device_sink_index() {
     Helper::get_instance().log("Not found player sink. Can't continue.");
     return -1;
   }
-  return player_sink_id;  // return sink id
+  return player_sink_id; // return sink id
 }
 
 std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
@@ -1778,15 +1787,15 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
   }
   std::vector<std::pair<std::string, std::string>> metadata;
 #ifdef SUPPORT_AUDIO_OUTPUT
-  if (get_current_player_name() == "Local") {  // if local
+  if (get_current_player_name() == "Local") { // if local
     metadata.push_back(std::make_pair(
-        "xesam:title", Mix_GetMusicTitle(m_current_music)));  // set title
+        "xesam:title", Mix_GetMusicTitle(m_current_music))); // set title
     metadata.push_back(std::make_pair(
-        "xesam:artist", Mix_GetMusicArtistTag(m_current_music)));  // set artist
+        "xesam:artist", Mix_GetMusicArtistTag(m_current_music))); // set artist
     metadata.push_back(std::make_pair(
         "mpris:length",
-        std::to_string(Mix_MusicDuration(m_current_music))));  // set length
-    return metadata;                                           // and return
+        std::to_string(Mix_MusicDuration(m_current_music)))); // set length
+    return metadata;                                          // and return
   }
 #endif
 #ifdef HAVE_DBUS
@@ -1814,194 +1823,193 @@ std::vector<std::pair<std::string, std::string>> Player::get_metadata() {
         .onInterface("org.freedesktop.DBus.Properties")
         .withArguments(
             "org.mpris.MediaPlayer2.Player",
-            "Metadata")  // get metadata from dbus and write info variant
+            "Metadata") // get metadata from dbus and write info variant
         .storeResultsTo(metadata_v);
     auto meta = metadata_v.get<
-        std::map<std::string, sdbus::Variant>>();  // convert into std::map of
-                                                   // string and Variant
-    std::map<std::string, int> type_map = {{"n", 1},     // int16
-                                           {"q", 2},     // uint16
-                                           {"i", 3},     // int32
-                                           {"u", 4},     // uint32
-                                           {"x", 5},     // int64
-                                           {"t", 6},     // uint64
-                                           {"d", 7},     // double
-                                           {"s", 8},     // string
-                                           {"o", 9},     // object path
-                                           {"b", 10},    // boolean
-                                           {"as", 11}};  // array of strings
+        std::map<std::string, sdbus::Variant>>();    // convert into std::map of
+                                                     // string and Variant
+    std::map<std::string, int> type_map = {{"n", 1}, // int16
+                                           {"q", 2}, // uint16
+                                           {"i", 3}, // int32
+                                           {"u", 4}, // uint32
+                                           {"x", 5}, // int64
+                                           {"t", 6}, // uint64
+                                           {"d", 7}, // double
+                                           {"s", 8}, // string
+                                           {"o", 9}, // object path
+                                           {"b", 10},   // boolean
+                                           {"as", 11}}; // array of strings
 
-    for (auto &data : meta) {  // start parsing
+    for (auto &data : meta) { // start parsing
       std::string type = data.second.peekValueType();
       switch (type_map[type]) {
-        case 0: {
+      case 0: {
+        Helper::get_instance().log(
+            "Warning: not implemented parsing for type \"" + type +
+            "\", skipping " + data.first);
+      }
+      case 1: { // int16
+        try {
+          int16_t num = data.second.get<int16_t>();
+          metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+        } catch (const sdbus::Error &e) {
           Helper::get_instance().log(
-              "Warning: not implemented parsing for type \"" + type +
-              "\", skipping " + data.first);
+              std::string("Error while trying to fetch int16: ") + e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"n\" expected.");
+          break;
         }
-        case 1: {  // int16
-          try {
-            int16_t num = data.second.get<int16_t>();
-            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch int16: ") + e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"n\" expected.");
-            break;
-          }
 
+        break;
+      }
+      case 2: { // uint16
+        try {
+          uint16_t num = data.second.get<uint16_t>();
+          metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+        } catch (const sdbus::Error &e) {
+          Helper::get_instance().log(
+              std::string("Error while trying to fetch uint16: ") + e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"q\" expected.");
           break;
         }
-        case 2: {  // uint16
-          try {
-            uint16_t num = data.second.get<uint16_t>();
-            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch uint16: ") + e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"q\" expected.");
-            break;
-          }
 
+        break;
+      }
+      case 3: { // int32
+        try {
+          int32_t num = data.second.get<int32_t>();
+          metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+        } catch (const sdbus::Error &e) {
+          Helper::get_instance().log(
+              std::string("Error while trying to fetch int32: ") + e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"i\" expected.");
           break;
         }
-        case 3: {  // int32
-          try {
-            int32_t num = data.second.get<int32_t>();
-            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch int32: ") + e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"i\" expected.");
-            break;
-          }
 
+        break;
+      }
+      case 4: { // uint32
+        try {
+          uint32_t num = data.second.get<uint32_t>();
+          metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+        } catch (const sdbus::Error &e) {
+          Helper::get_instance().log(
+              std::string("Error while trying to fetch uint32: ") + e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"i\" expected.");
           break;
         }
-        case 4: {  // uint32
-          try {
-            uint32_t num = data.second.get<uint32_t>();
-            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch uint32: ") + e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"i\" expected.");
-            break;
-          }
 
+        break;
+      }
+      case 5: { // int64
+        try {
+          int64_t num = data.second.get<int64_t>();
+          metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+        } catch (const sdbus::Error &e) {
+          Helper::get_instance().log(
+              std::string("Error while trying to fetch int64: ") + e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"x\" expected.");
           break;
         }
-        case 5: {  // int64
-          try {
-            int64_t num = data.second.get<int64_t>();
-            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch int64: ") + e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"x\" expected.");
-            break;
-          }
 
+        break;
+      }
+      case 6: { // uint64
+        try {
+          uint64_t num = data.second.get<uint64_t>();
+          metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+        } catch (const sdbus::Error &e) {
+          Helper::get_instance().log(
+              std::string("Error while trying to fetch uint64: ") + e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"d\" expected.");
           break;
         }
-        case 6: {  // uint64
-          try {
-            uint64_t num = data.second.get<uint64_t>();
-            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch uint64: ") + e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"d\" expected.");
-            break;
-          }
 
+        break;
+      }
+      case 7: { // double
+        try {
+          double num = data.second.get<double>();
+          metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+        } catch (const sdbus::Error &e) {
+          Helper::get_instance().log(
+              std::string("Error while trying to fetch double: ") + e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"t\" expected.");
           break;
         }
-        case 7: {  // double
-          try {
-            double num = data.second.get<double>();
-            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch double: ") + e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"t\" expected.");
-            break;
-          }
 
+        break;
+      }
+      case 8: { // string
+        try {
+          std::string str = data.second.get<std::string>();
+          metadata.push_back(std::make_pair(data.first, str));
+        } catch (const sdbus::Error &e) {
+          Helper::get_instance().log(
+              std::string("Error while trying to fetch string: ") + e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"s\" expected.");
           break;
         }
-        case 8: {  // string
-          try {
-            std::string str = data.second.get<std::string>();
-            metadata.push_back(std::make_pair(data.first, str));
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch string: ") + e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"s\" expected.");
-            break;
-          }
 
+        break;
+      }
+      case 9: { // object path
+        try {
+          std::string path = data.second.get<sdbus::ObjectPath>();
+          metadata.push_back(std::make_pair(data.first, path));
+        } catch (const sdbus::Error &e) {
+          Helper::get_instance().log(
+              std::string("Error while trying to fetch object path: ") +
+              e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"o\" expected.");
           break;
         }
-        case 9: {  // object path
-          try {
-            std::string path = data.second.get<sdbus::ObjectPath>();
-            metadata.push_back(std::make_pair(data.first, path));
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch object path: ") +
-                e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"o\" expected.");
-            break;
+        break;
+      }
+      case 10: { // boolean
+        try {
+          bool boolean = data.second.get<bool>();
+          metadata.push_back(
+              std::make_pair(data.first, bool_to_string(boolean)));
+        } catch (const sdbus::Error &e) {
+          Helper::get_instance().log(
+              std::string("Error while trying to fetch boolean: ") + e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"b\" expected.");
+          break;
+        }
+        break;
+      }
+      case 11: { // array of strings
+        try {
+          std::vector<std::string> arr =
+              data.second.get<std::vector<std::string>>();
+          for (auto &entry : arr) {
+            metadata.push_back(std::make_pair(data.first, entry));
           }
+        } catch (const sdbus::Error &e) {
+          Helper::get_instance().log(
+              std::string("Error while trying to fetch array of strings: ") +
+              e.what());
+          Helper::get_instance().log("Received type: \"" + type +
+                                     "\" while \"b\" expected.");
           break;
         }
-        case 10: {  // boolean
-          try {
-            bool boolean = data.second.get<bool>();
-            metadata.push_back(
-                std::make_pair(data.first, bool_to_string(boolean)));
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch boolean: ") +
-                e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"b\" expected.");
-            break;
-          }
-          break;
-        }
-        case 11: {  // array of strings
-          try {
-            std::vector<std::string> arr =
-                data.second.get<std::vector<std::string>>();
-            for (auto &entry : arr) {
-              metadata.push_back(std::make_pair(data.first, entry));
-            }
-          } catch (const sdbus::Error &e) {
-            Helper::get_instance().log(
-                std::string("Error while trying to fetch array of strings: ") +
-                e.what());
-            Helper::get_instance().log("Received type: \"" + type +
-                                       "\" while \"b\" expected.");
-            break;
-          }
-          break;
-        }
-        default: {
-          Helper::get_instance().log("Got not implemented data type: " + type +
-                                     ", skipping " + data.first);
-          break;
-        }
+        break;
+      }
+      default: {
+        Helper::get_instance().log("Got not implemented data type: " + type +
+                                   ", skipping " + data.first);
+        break;
+      }
       }
     }
   } catch (const sdbus::Error &e) {
@@ -2056,7 +2064,7 @@ Player::get_output_devices() {
           auto devices = static_cast<
               std::vector<std::pair<std::string, unsigned short>> *>(userdata);
           devices->emplace_back(info->description,
-                                info->index);  // add device info devices vector
+                                info->index); // add device info devices vector
         }
       },
       &m_devices);
@@ -2072,23 +2080,23 @@ Player::get_output_devices() {
     pa_mainloop_iterate(mainloop, true, NULL);
   }
 
-  for (auto &device : m_devices) {  // print all devices
+  for (auto &device : m_devices) { // print all devices
     Helper::get_instance().log("Sink name: " + device.first);
     Helper::get_instance().log("Sink index: " + std::to_string(device.second));
   }
 
-  pa_context_disconnect(context);  // free pulseaudio elements
+  pa_context_disconnect(context); // free pulseaudio elements
   pa_context_unref(context);
   pa_mainloop_free(mainloop);
 #endif
 
 #ifdef HAVE_PIPEWIRE
-  auto main_loop = pipewire::main_loop();
-  auto context = pipewire::context(main_loop);
-  auto core = pipewire::core(context);
-  auto reg = pipewire::registry(core);
+  auto main_loop = pipewire::main_loop::create();
+  auto context = pipewire::context::create(main_loop);
+  auto core = context->core();
+  auto reg = core->registry();
 
-  auto reg_listener = reg.listen<pipewire::registry_listener>();
+  auto reg_listener = reg->listen<pipewire::registry_listener>();
 
   struct output_device {
     uint32_t node_id;
@@ -2101,12 +2109,13 @@ Player::get_output_devices() {
   reg_listener.on<pipewire::registry_event::global>(
       [&](const pipewire::global &global) {
         if (global.type == pipewire::node::type) {
-          auto node = reg.bind<pipewire::node>(global.id).get();
+          auto node = reg->bind<pipewire::node>(global.id).get();
           auto info = node->info();
           output_device device;
           device.node_id = info.id;
           for (const auto &prop : info.props) {
-            if (prop.first == "media.class") device.media_class = prop.second;
+            if (prop.first == "media.class")
+              device.media_class = prop.second;
             if (prop.first == "node.description")
               device.node_desc = prop.second;
           }
@@ -2114,7 +2123,7 @@ Player::get_output_devices() {
         }
       });
 
-  core.update();
+  core->update();
 
   for (const auto &device : devices) {
     if (device.media_class == "Audio/Sink" &&
@@ -2124,7 +2133,7 @@ Player::get_output_devices() {
 
 #endif
 
-  return m_devices;  // return devices
+  return m_devices; // return devices
 }
 
 void Player::set_output_device(unsigned short output_sink_index) {
@@ -2153,18 +2162,18 @@ void Player::set_output_device(unsigned short output_sink_index) {
   static uint32_t proc_id = 0;
 #ifdef SUPPORT_AUDIO_OUTPUT
   if (get_current_player_name() == "Local")
-    proc_id = getpid();  // if local player then get process id of current
-                         // process
+    proc_id = getpid(); // if local player then get process id of current
+                        // process
 #endif
 #ifdef HAVE_DBUS
-  if (get_current_player_name() != "Local") {  // if dbus player
+  if (get_current_player_name() != "Local") { // if dbus player
     try {
       auto proxy = sdbus::createProxy(
           *m_dbus_conn.get(), "org.freedesktop.DBus", "/org/freedesktop/DBus");
       proxy->callMethod("GetConnectionUnixProcessID")
           .onInterface("org.freedesktop.DBus")
           .withArguments(m_players[m_selected_player_id].second)
-          .storeResultsTo(proc_id);  // get proc id from dbus
+          .storeResultsTo(proc_id); // get proc id from dbus
     } catch (const sdbus::Error &e) {
       Helper::get_instance().log(
           std::string("Error while getting current device process id: ") +
@@ -2231,8 +2240,8 @@ void Player::set_output_device(unsigned short output_sink_index) {
                                      "\" and \"" + player_name + "\"");
           char player_proc_id_str[10];
           snprintf(player_proc_id_str, sizeof(player_proc_id_str), "%u",
-                   proc_id);  // convert proc_id to char[10] for converting
-                              // between char[]
+                   proc_id); // convert proc_id to char[10] for converting
+                             // between char[]
           Helper::get_instance().log(std::string("procid: ") +
                                      player_proc_id_str);
           if (strcmp(pa_proplist_gets(info->proplist, "application.process.id"),
@@ -2291,11 +2300,11 @@ void Player::set_output_device(unsigned short output_sink_index) {
 #endif
 
 #ifdef HAVE_PIPEWIRE
-  auto main_loop = pipewire::main_loop();
-  auto context = pipewire::context(main_loop);
-  auto core = pipewire::core(context);
-  auto reg = pipewire::registry(core);
-  auto reg_listener = reg.listen<pipewire::registry_listener>();
+  auto main_loop = pipewire::main_loop::create();
+  auto context = pipewire::context::create(main_loop);
+  auto core = context->core();
+  auto reg = core->registry();
+  auto reg_listener = reg->listen<pipewire::registry_listener>();
   struct node_my {
     uint32_t node_id;
     uint32_t client_id;
@@ -2317,7 +2326,7 @@ void Player::set_output_device(unsigned short output_sink_index) {
   reg_listener.on<pipewire::registry_event::global>(
       [&](const pipewire::global &global) {
         if (global.type == pipewire::node::type) {
-          auto node = reg.bind<pipewire::node>(global.id).get();
+          auto node = reg->bind<pipewire::node>(global.id).get();
           auto info = node->info();
           node_my node_to_add;
           node_to_add.node_id = info.id;
@@ -2345,7 +2354,7 @@ void Player::set_output_device(unsigned short output_sink_index) {
               link.output_node = std::stoi(prop.second);
           }
           link.link = static_cast<struct pw_link *>(
-              pw_registry_bind(reg.get(), global.id, PW_TYPE_INTERFACE_Link,
+              pw_registry_bind(reg.get()->get(), global.id, PW_TYPE_INTERFACE_Link,
                                PW_VERSION_LINK, 0));
           links.push_back(link);
         }
@@ -2354,14 +2363,14 @@ void Player::set_output_device(unsigned short output_sink_index) {
           for (const auto &prop : info) {
             if (prop.first == "metadata.name" && prop.second == "default") {
               metadata = static_cast<pw_metadata *>(pw_registry_bind(
-                  reg.get(), global.id, PW_TYPE_INTERFACE_Metadata,
+                  reg.get()->get(), global.id, PW_TYPE_INTERFACE_Metadata,
                   PW_VERSION_METADATA, 0));
               break;
             }
           }
         }
       });
-  core.update();
+  core->update();
   uint32_t current_player_id = -1;
   for (const auto &node : nodes) {
     if (node.proc_id == proc_id && node.media_class == "Stream/Output/Audio") {
@@ -2381,7 +2390,7 @@ void Player::set_output_device(unsigned short output_sink_index) {
             "Error! Metadata not found, so can't change output device.");
       }
 
-      core.update();
+      core->update();
       break;
     }
   }
@@ -2430,15 +2439,15 @@ void Player::set_is_playing(bool new_is_playing) {
 void Player::stop_listening_signals() { m_proxy_signal.reset(); }
 
 void Player::start_listening_signals() {
-  stop_listening_signals();  // stop listening previous signals
+  stop_listening_signals(); // stop listening previous signals
   m_proxy_signal = sdbus::createProxy(*m_dbus_conn.get(),
                                       m_players[m_selected_player_id].second,
                                       "/org/mpris/MediaPlayer2");
-  m_proxy_signal->registerSignalHandler(  // subscribe to Dbus Signals
+  m_proxy_signal->registerSignalHandler( // subscribe to Dbus Signals
       "org.freedesktop.DBus.Properties", "PropertiesChanged",
       [this](sdbus::Signal &sig) {
         on_properties_changed(sig);
-      });  // call corresponding functions
+      }); // call corresponding functions
   m_proxy_signal->registerSignalHandler(
       "org.mpris.MediaPlayer2.Player", "Seeked",
       [this](sdbus::Signal &sig) { on_seeked(sig); });
@@ -2451,11 +2460,11 @@ void Player::start_listening_signals() {
 
 void Player::on_properties_changed(sdbus::Signal &signal) {
   std::map<std::string, int> property_map = {
-      {"Shuffle", 1},         // Shuffle
-      {"Metadata", 2},        // Changed song
-      {"Volume", 3},          // changed Volume
-      {"PlaybackStatus", 4},  // paused or played
-      {"LoopStatus", 5}};     // Loop button status
+      {"Shuffle", 1},        // Shuffle
+      {"Metadata", 2},       // Changed song
+      {"Volume", 3},         // changed Volume
+      {"PlaybackStatus", 4}, // paused or played
+      {"LoopStatus", 5}};    // Loop button status
 
   // Handle the PropertiesChanged signal
   Helper::get_instance().log("Prop changed");
@@ -2464,396 +2473,374 @@ void Player::on_properties_changed(sdbus::Signal &signal) {
   std::vector<std::string> array_of_strings;
   signal >> string_arg;
   signal >> properties;
-  for (auto &prop : properties) {  // start parsing properties
+  for (auto &prop : properties) { // start parsing properties
     Helper::get_instance().log(prop.first);
     switch (property_map[prop.first]) {
-      case 0: {  // not mapped
-        Helper::get_instance().log("Property \"" + prop.first +
-                                   "\" not supported.");
-        return;
+    case 0: { // not mapped
+      Helper::get_instance().log("Property \"" + prop.first +
+                                 "\" not supported.");
+      return;
+    }
+    case 1: { // shuffle
+      Helper::get_instance().log("Shuffle property changed, new value: " +
+                                 std::to_string(prop.second.get<bool>()));
+      bool new_is_shuffle = prop.second.get<bool>();
+      if (m_is_shuffle != new_is_shuffle) {
+        m_is_shuffle = new_is_shuffle;
+        notify_observers_is_shuffle_changed();
       }
-      case 1: {  // shuffle
-        Helper::get_instance().log("Shuffle property changed, new value: " +
-                                   std::to_string(prop.second.get<bool>()));
-        bool new_is_shuffle = prop.second.get<bool>();
-        if (m_is_shuffle != new_is_shuffle) {
-          m_is_shuffle = new_is_shuffle;
-          notify_observers_is_shuffle_changed();
+      return;
+    }
+    case 2: { // metadata
+      Helper::get_instance().log("Metadata property changed.");
+      auto meta_v = prop.second.get<std::map<std::string, sdbus::Variant>>();
+      std::map<std::string, int> type_map = {{"n", 1},    // int16
+                                             {"q", 2},    // uint16
+                                             {"i", 3},    // int32
+                                             {"u", 4},    // uint32
+                                             {"x", 5},    // int64
+                                             {"t", 6},    // uint64
+                                             {"d", 7},    // double
+                                             {"s", 8},    // string
+                                             {"o", 9},    // object path
+                                             {"b", 10},   // boolean
+                                             {"as", 11}}; // array of strings
+      std::vector<std::pair<std::string, std::string>> metadata;
+
+      for (auto &data : meta_v) {
+        std::string type = data.second.peekValueType();
+        switch (type_map[type]) {
+        case 0: {
+          Helper::get_instance().log(
+              "Warning: not implemented parsing for type \"" + type +
+              "\", skipping " + data.first);
         }
-        return;
-      }
-      case 2: {  // metadata
-        Helper::get_instance().log("Metadata property changed.");
-        auto meta_v = prop.second.get<std::map<std::string, sdbus::Variant>>();
-        std::map<std::string, int> type_map = {{"n", 1},     // int16
-                                               {"q", 2},     // uint16
-                                               {"i", 3},     // int32
-                                               {"u", 4},     // uint32
-                                               {"x", 5},     // int64
-                                               {"t", 6},     // uint64
-                                               {"d", 7},     // double
-                                               {"s", 8},     // string
-                                               {"o", 9},     // object path
-                                               {"b", 10},    // boolean
-                                               {"as", 11}};  // array of strings
-        std::vector<std::pair<std::string, std::string>> metadata;
-
-        for (auto &data : meta_v) {
-          std::string type = data.second.peekValueType();
-          switch (type_map[type]) {
-            case 0: {
-              Helper::get_instance().log(
-                  "Warning: not implemented parsing for type \"" + type +
-                  "\", skipping " + data.first);
-            }
-            case 1: {  // int16
-              try {
-                int16_t num = data.second.get<int16_t>();
-                Helper::get_instance().log(data.first + ": " +
-                                           std::to_string(num));
-                metadata.push_back(
-                    std::make_pair(data.first, std::to_string(num)));
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string("Error while trying to fetch int16: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"n\" expected.");
-                break;
-              }
-
-              break;
-            }
-            case 2: {  // uint16
-              try {
-                uint16_t num = data.second.get<uint16_t>();
-                Helper::get_instance().log(data.first + ": " +
-                                           std::to_string(num));
-                metadata.push_back(
-                    std::make_pair(data.first, std::to_string(num)));
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string("Error while trying to fetch uint16: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"q\" expected.");
-                break;
-              }
-
-              break;
-            }
-            case 3: {  // int32
-              try {
-                int32_t num = data.second.get<int32_t>();
-                Helper::get_instance().log(data.first + ": " +
-                                           std::to_string(num));
-                metadata.push_back(
-                    std::make_pair(data.first, std::to_string(num)));
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string("Error while trying to fetch int32: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"i\" expected.");
-                break;
-              }
-
-              break;
-            }
-            case 4: {  // uint32
-              try {
-                uint32_t num = data.second.get<uint32_t>();
-                Helper::get_instance().log(data.first + ": " +
-                                           std::to_string(num));
-                metadata.push_back(
-                    std::make_pair(data.first, std::to_string(num)));
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string("Error while trying to fetch uint32: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"i\" expected.");
-                break;
-              }
-
-              break;
-            }
-            case 5: {  // int64
-              try {
-                int64_t num = data.second.get<int64_t>();
-                Helper::get_instance().log(data.first + ": " +
-                                           std::to_string(num));
-                metadata.push_back(
-                    std::make_pair(data.first, std::to_string(num)));
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string("Error while trying to fetch int64: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"x\" expected.");
-                break;
-              }
-
-              break;
-            }
-            case 6: {  // uint64
-              try {
-                uint64_t num = data.second.get<uint64_t>();
-                Helper::get_instance().log(data.first + ": " +
-                                           std::to_string(num));
-                metadata.push_back(
-                    std::make_pair(data.first, std::to_string(num)));
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string("Error while trying to fetch uint64: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"d\" expected.");
-                break;
-              }
-
-              break;
-            }
-            case 7: {  // double
-              try {
-                double num = data.second.get<double>();
-                Helper::get_instance().log(data.first + ": " +
-                                           std::to_string(num));
-                metadata.push_back(
-                    std::make_pair(data.first, std::to_string(num)));
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string("Error while trying to fetch double: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"t\" expected.");
-                break;
-              }
-
-              break;
-            }
-            case 8: {  // string
-              try {
-                std::string str = data.second.get<std::string>();
-                Helper::get_instance().log(data.first + ": " + str);
-                metadata.push_back(std::make_pair(data.first, str));
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string("Error while trying to fetch string: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"s\" expected.");
-                break;
-              }
-
-              break;
-            }
-            case 9: {  // object path
-              try {
-                std::string path = data.second.get<sdbus::ObjectPath>();
-                Helper::get_instance().log(data.first + ": " + path);
-                metadata.push_back(std::make_pair(data.first, path));
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string("Error while trying to fetch object path: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"o\" expected.");
-                break;
-              }
-              break;
-            }
-            case 10: {  // boolean
-              try {
-                bool boolean = data.second.get<bool>();
-                Helper::get_instance().log(data.first + ": " +
-                                           bool_to_string(boolean));
-                metadata.push_back(
-                    std::make_pair(data.first, bool_to_string(boolean)));
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string("Error while trying to fetch boolean: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"b\" expected.");
-                break;
-              }
-              break;
-            }
-            case 11: {  // array of strings
-              try {
-                std::vector<std::string> arr =
-                    data.second.get<std::vector<std::string>>();
-                for (auto &entry : arr) {
-                  Helper::get_instance().log(data.first + ": " + entry);
-                  metadata.push_back(std::make_pair(data.first, entry));
-                }
-              } catch (const sdbus::Error &e) {
-                Helper::get_instance().log(
-                    std::string(
-                        "Error while trying to fetch array of strings: ") +
-                    e.what());
-                Helper::get_instance().log("Received type: \"" + type +
-                                           "\" while \"b\" expected.");
-                break;
-              }
-              break;
-            }
-            default: {
-              Helper::get_instance().log("Got not implemented data type: " +
-                                         type + ", skipping " + data.first);
-              break;
-            }
+        case 1: { // int16
+          try {
+            int16_t num = data.second.get<int16_t>();
+            Helper::get_instance().log(data.first + ": " + std::to_string(num));
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch int16: ") + e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"n\" expected.");
+            break;
           }
-        }
 
-        for (auto &info : metadata) {
-          if (info.first == "mpris:length") {  // get new length
-            int64_t length = stol(info.second);
-            length /= 1000000;
-            if (m_song_length != length) {
-              m_song_length = length;
-              m_song_length_str = Helper::get_instance().format_time(length);
-              notify_observers_song_length_changed();  // notify that song
-                                                       // length changed
-            }
-            Helper::get_instance().log("Song length: " + m_song_length_str);
-          } else if (info.first == "xesam:artist") {  // get new artist
-            std::string new_artist = info.second;
-            if (m_song_artist != new_artist) {
-              m_song_artist = info.second;
-              notify_observers_song_artist_changed();  // notify that artist
-                                                       // changed
-            }
-          } else if (info.first == "xesam:title") {  // get new title
-            std::string new_title = info.second;
-            if (m_song_title != new_title) {
-              m_song_title = info.second;
-              notify_observers_song_title_changed();  // notify that title
-                                                      // changed
-            }
+          break;
+        }
+        case 2: { // uint16
+          try {
+            uint16_t num = data.second.get<uint16_t>();
+            Helper::get_instance().log(data.first + ": " + std::to_string(num));
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch uint16: ") + e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"q\" expected.");
+            break;
           }
+
+          break;
         }
-        return;
-      }
-      case 3: {  // Volume property
-        Helper::get_instance().log("Volume property changed, new value: " +
-                                   std::to_string(prop.second.get<double>()));
-        double new_volume = prop.second.get<double>();
-        if (m_song_volume != new_volume) {
-          m_song_volume = new_volume;              // write new volume
-          notify_observers_song_volume_changed();  // notify that volume changed
+        case 3: { // int32
+          try {
+            int32_t num = data.second.get<int32_t>();
+            Helper::get_instance().log(data.first + ": " + std::to_string(num));
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch int32: ") + e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"i\" expected.");
+            break;
+          }
+
+          break;
         }
-        return;
-      }
-      case 4: {  // PlaybackStatus
-        Helper::get_instance().log(
-            "PlaybackStatus property changed, new value: " +
-            prop.second.get<std::string>());
-        bool new_is_playing = prop.second.get<std::string>() ==
-                              "Playing";  // write new playback status
-        if (m_is_playing != new_is_playing) {
-          m_is_playing = new_is_playing;
-          notify_observers_is_playing_changed();  // notify that playback status
-                                                  // changed
+        case 4: { // uint32
+          try {
+            uint32_t num = data.second.get<uint32_t>();
+            Helper::get_instance().log(data.first + ": " + std::to_string(num));
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch uint32: ") + e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"i\" expected.");
+            break;
+          }
+
+          break;
         }
-        return;
+        case 5: { // int64
+          try {
+            int64_t num = data.second.get<int64_t>();
+            Helper::get_instance().log(data.first + ": " + std::to_string(num));
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch int64: ") + e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"x\" expected.");
+            break;
+          }
+
+          break;
+        }
+        case 6: { // uint64
+          try {
+            uint64_t num = data.second.get<uint64_t>();
+            Helper::get_instance().log(data.first + ": " + std::to_string(num));
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch uint64: ") + e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"d\" expected.");
+            break;
+          }
+
+          break;
+        }
+        case 7: { // double
+          try {
+            double num = data.second.get<double>();
+            Helper::get_instance().log(data.first + ": " + std::to_string(num));
+            metadata.push_back(std::make_pair(data.first, std::to_string(num)));
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch double: ") + e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"t\" expected.");
+            break;
+          }
+
+          break;
+        }
+        case 8: { // string
+          try {
+            std::string str = data.second.get<std::string>();
+            Helper::get_instance().log(data.first + ": " + str);
+            metadata.push_back(std::make_pair(data.first, str));
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch string: ") + e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"s\" expected.");
+            break;
+          }
+
+          break;
+        }
+        case 9: { // object path
+          try {
+            std::string path = data.second.get<sdbus::ObjectPath>();
+            Helper::get_instance().log(data.first + ": " + path);
+            metadata.push_back(std::make_pair(data.first, path));
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch object path: ") +
+                e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"o\" expected.");
+            break;
+          }
+          break;
+        }
+        case 10: { // boolean
+          try {
+            bool boolean = data.second.get<bool>();
+            Helper::get_instance().log(data.first + ": " +
+                                       bool_to_string(boolean));
+            metadata.push_back(
+                std::make_pair(data.first, bool_to_string(boolean)));
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch boolean: ") +
+                e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"b\" expected.");
+            break;
+          }
+          break;
+        }
+        case 11: { // array of strings
+          try {
+            std::vector<std::string> arr =
+                data.second.get<std::vector<std::string>>();
+            for (auto &entry : arr) {
+              Helper::get_instance().log(data.first + ": " + entry);
+              metadata.push_back(std::make_pair(data.first, entry));
+            }
+          } catch (const sdbus::Error &e) {
+            Helper::get_instance().log(
+                std::string("Error while trying to fetch array of strings: ") +
+                e.what());
+            Helper::get_instance().log("Received type: \"" + type +
+                                       "\" while \"b\" expected.");
+            break;
+          }
+          break;
+        }
+        default: {
+          Helper::get_instance().log("Got not implemented data type: " + type +
+                                     ", skipping " + data.first);
+          break;
+        }
+        }
       }
-      case 5: {  // LoopStatus
-        std::string loop =
-            prop.second.get<std::string>();  // get new loop status
-        Helper::get_instance().log("LoopStatus property changed, new value: " +
-                                   loop);
-        int new_repeat = -1;
-        if (loop == "None")  // parse it into string
-          new_repeat = 0;
-        else if (loop == "Playlist")
-          new_repeat = 1;
-        else if (loop == "Track")
-          new_repeat = 2;
-        else
-          new_repeat = -1;
-        if (m_repeat != new_repeat) {
-          m_repeat = new_repeat;
-          notify_observers_loop_status_changed();  // notify that loop status
+
+      for (auto &info : metadata) {
+        if (info.first == "mpris:length") { // get new length
+          int64_t length = stol(info.second);
+          length /= 1000000;
+          if (m_song_length != length) {
+            m_song_length = length;
+            m_song_length_str = Helper::get_instance().format_time(length);
+            notify_observers_song_length_changed(); // notify that song
+                                                    // length changed
+          }
+          Helper::get_instance().log("Song length: " + m_song_length_str);
+        } else if (info.first == "xesam:artist") { // get new artist
+          std::string new_artist = info.second;
+          if (m_song_artist != new_artist) {
+            m_song_artist = info.second;
+            notify_observers_song_artist_changed(); // notify that artist
+                                                    // changed
+          }
+        } else if (info.first == "xesam:title") { // get new title
+          std::string new_title = info.second;
+          if (m_song_title != new_title) {
+            m_song_title = info.second;
+            notify_observers_song_title_changed(); // notify that title
                                                    // changed
+          }
         }
       }
+      return;
+    }
+    case 3: { // Volume property
+      Helper::get_instance().log("Volume property changed, new value: " +
+                                 std::to_string(prop.second.get<double>()));
+      double new_volume = prop.second.get<double>();
+      if (m_song_volume != new_volume) {
+        m_song_volume = new_volume;             // write new volume
+        notify_observers_song_volume_changed(); // notify that volume changed
+      }
+      return;
+    }
+    case 4: { // PlaybackStatus
+      Helper::get_instance().log(
+          "PlaybackStatus property changed, new value: " +
+          prop.second.get<std::string>());
+      bool new_is_playing = prop.second.get<std::string>() ==
+                            "Playing"; // write new playback status
+      if (m_is_playing != new_is_playing) {
+        m_is_playing = new_is_playing;
+        notify_observers_is_playing_changed(); // notify that playback status
+                                               // changed
+      }
+      return;
+    }
+    case 5: {                                            // LoopStatus
+      std::string loop = prop.second.get<std::string>(); // get new loop status
+      Helper::get_instance().log("LoopStatus property changed, new value: " +
+                                 loop);
+      int new_repeat = -1;
+      if (loop == "None") // parse it into string
+        new_repeat = 0;
+      else if (loop == "Playlist")
+        new_repeat = 1;
+      else if (loop == "Track")
+        new_repeat = 2;
+      else
+        new_repeat = -1;
+      if (m_repeat != new_repeat) {
+        m_repeat = new_repeat;
+        notify_observers_loop_status_changed(); // notify that loop status
+                                                // changed
+      }
+    }
     }
   }
 }
 void Player::on_seeked(sdbus::Signal &signal) {
-  double new_pos = get_position();  // get new position
+  double new_pos = get_position(); // get new position
   if (m_song_pos != new_pos) {
-    m_song_pos = get_position();               // set new position
-    notify_observers_song_position_changed();  // notify that position changed
+    m_song_pos = get_position();              // set new position
+    notify_observers_song_position_changed(); // notify that position changed
   }
 }
 
 #endif
 
 void Player::add_observer(PlayerObserver *observer) {
-  m_observers.push_back(observer);  // add observer to m_observers vector
+  m_observers.push_back(observer); // add observer to m_observers vector
 }
 
 void Player::remove_observer(PlayerObserver *observer) {
   m_observers.erase(
       std::remove(m_observers.begin(), m_observers.end(), observer),
-      m_observers.end());  // find and remove observer from m_observers vector
+      m_observers.end()); // find and remove observer from m_observers vector
 }
 
 std::string Player::get_song_name() const { return m_song_title; }
 
 void Player::set_song_name(const std::string &new_song_name) {
-  m_song_title = new_song_name;           // set new song name
-  notify_observers_song_title_changed();  // notify that song name changed
+  m_song_title = new_song_name;          // set new song name
+  notify_observers_song_title_changed(); // notify that song name changed
 }
 
 std::string Player::get_song_author() const { return m_song_artist; }
 
 void Player::set_song_author(const std::string &new_song_author) {
-  m_song_artist = new_song_author;         // set new artist
-  notify_observers_song_artist_changed();  // notify that artist changed
+  m_song_artist = new_song_author;        // set new artist
+  notify_observers_song_artist_changed(); // notify that artist changed
 }
 
 std::string Player::get_song_length_str() const { return m_song_length_str; }
 
 void Player::set_song_length(const std::string &new_song_length) {
-  m_song_length_str = new_song_length;     // set new song length
-  notify_observers_song_length_changed();  // notify that length changed
+  m_song_length_str = new_song_length;    // set new song length
+  notify_observers_song_length_changed(); // notify that length changed
 }
 
 void Player::get_song_data() {
   auto metadata = get_metadata();
-  for (auto &info : metadata) {          // start parsing metadata
-    if (info.first == "mpris:length") {  // find length
+  for (auto &info : metadata) {         // start parsing metadata
+    if (info.first == "mpris:length") { // find length
       Helper::get_instance().log("Got metadata length: " + info.second);
       int64_t length = stol(info.second);
-      if (length == -1) length = 0;
+      if (length == -1)
+        length = 0;
       Helper::get_instance().log("Stol: " + std::to_string(length));
-      if (get_current_player_name() != "Local") length /= 1000000;
+      if (get_current_player_name() != "Local")
+        length /= 1000000;
       if (m_song_length != length) {
         m_song_length = length;
         m_song_length_str = Helper::get_instance().format_time(length);
-        notify_observers_song_length_changed();  // notify that length changed
+        notify_observers_song_length_changed(); // notify that length changed
       }
       Helper::get_instance().log("Song length: " + m_song_length_str);
-    } else if (info.first == "xesam:artist") {  // find artist
+    } else if (info.first == "xesam:artist") { // find artist
       if (m_song_artist != info.second) {
         m_song_artist = info.second;
-        notify_observers_song_artist_changed();  // notify that artist changed
+        notify_observers_song_artist_changed(); // notify that artist changed
       }
     } else if (info.first == "xesam:title") {
       if (m_song_title != info.second) {
-        m_song_title = info.second;             // find title
-        notify_observers_song_title_changed();  // notify that title changed
+        m_song_title = info.second;            // find title
+        notify_observers_song_title_changed(); // notify that title changed
       }
     }
   }
   auto new_shuffle = get_shuffle();
   if (m_is_shuffle != new_shuffle) {
-    m_is_shuffle = new_shuffle;             // get new shuffle
-    notify_observers_is_shuffle_changed();  // notify that shuffle changed
+    m_is_shuffle = new_shuffle;            // get new shuffle
+    notify_observers_is_shuffle_changed(); // notify that shuffle changed
   }
   auto new_playing = get_playback_status();
   if (m_is_playing != new_playing) {
@@ -2868,7 +2855,8 @@ void Player::get_song_data() {
   auto new_pos = get_position();
   if (m_song_pos != new_pos) {
     m_song_pos = new_pos;
-    if (m_song_pos == -1) m_song_pos = 0;
+    if (m_song_pos == -1)
+      m_song_pos = 0;
     notify_observers_song_position_changed();
   }
   auto new_repeat = get_repeat();
@@ -2934,8 +2922,7 @@ void Player::notify_observers_loop_status_changed() {
   send_info_to_clients();
 }
 
-void Player::notify_observers_player_choosed(const bool toLocal)
-{
+void Player::notify_observers_player_choosed(const bool toLocal) {
   for (auto observer : m_observers) {
     observer->on_player_toggled(toLocal);
   }
@@ -2944,7 +2931,7 @@ void Player::notify_observers_player_choosed(const bool toLocal)
 #ifdef SUPPORT_AUDIO_OUTPUT
 
 bool Player::open_audio(const std::string &filename) {
-  Mix_FreeMusic(m_current_music);  // free previous opened music
+  Mix_FreeMusic(m_current_music); // free previous opened music
   SF_INFO info = {0};
   SNDFILE *sndfile = sf_open(filename.c_str(), SFM_READ, &info);
   if (!sndfile) {
@@ -2953,7 +2940,7 @@ bool Player::open_audio(const std::string &filename) {
     return false;
   }
 
-  Helper::get_instance().log("Audio file: " + filename);  // take info from file
+  Helper::get_instance().log("Audio file: " + filename); // take info from file
   Helper::get_instance().log("Sample rate: " + std::to_string(info.samplerate));
   Helper::get_instance().log("Channels: " + std::to_string(info.channels));
 
@@ -2964,41 +2951,41 @@ bool Player::open_audio(const std::string &filename) {
   int audio_buffers = 4096;
 
   if (Mix_OpenAudio(audio_rate, audio_format, audio_channels, audio_buffers) <
-      0) {  // if file cannot be opened
+      0) { // if file cannot be opened
     Helper::get_instance().log("Failed to open audio: " +
                                std::string(Mix_GetError()));
     return false;
   }
-  m_current_music = Mix_LoadMUS(filename.c_str());  // open file
-  if (!m_current_music) {                           // if not opened
+  m_current_music = Mix_LoadMUS(filename.c_str()); // open file
+  if (!m_current_music) {                          // if not opened
     Helper::get_instance().log("Mix_LoadMUS failed: " +
                                std::string(Mix_GetError()));
     return false;
   }
   Mix_PlayMusic(m_current_music, 0);
   Mix_PauseMusic();
-  m_song_title = Mix_GetMusicTitle(m_current_music);       // get title
-  m_song_artist = Mix_GetMusicArtistTag(m_current_music);  // get artist
+  m_song_title = Mix_GetMusicTitle(m_current_music);      // get title
+  m_song_artist = Mix_GetMusicArtistTag(m_current_music); // get artist
   if (m_song_title == "" && m_song_artist == "") {
-    m_song_title = filename;  // if no title and artist in audio file metadata,
-                              // then just make title named as filename
+    m_song_title = filename; // if no title and artist in audio file metadata,
+                             // then just make title named as filename
   }
-  m_song_length = Mix_MusicDuration(m_current_music);  // get duration
+  m_song_length = Mix_MusicDuration(m_current_music); // get duration
   m_song_length_str = Helper::get_instance().format_time(m_song_length);
   Helper::get_instance().log("Title: " + m_song_title);
-  notify_observers_song_title_changed();  // notify that title changed
+  notify_observers_song_title_changed(); // notify that title changed
   Helper::get_instance().log("Artist: " + m_song_artist);
-  notify_observers_song_artist_changed();  // notify that artist changed
+  notify_observers_song_artist_changed(); // notify that artist changed
   Helper::get_instance().log("Length (seconds): " +
                              std::to_string(m_song_length));
   notify_observers_song_length_changed();
-  m_song_pos = 0;                            // position from start
-  notify_observers_song_position_changed();  // notify that pos changed
+  m_song_pos = 0;                           // position from start
+  notify_observers_song_position_changed(); // notify that pos changed
   return true;
 }
 
 void Player::play_audio() {
-  if (!Mix_PlayingMusic()) {  // if not playing
+  if (!Mix_PlayingMusic()) { // if not playing
     // Start playing the audio
     if (Mix_PlayMusic(m_current_music, 0) == -1) {
       Helper::get_instance().log("Mix_PlayMusic failed: " +
@@ -3007,21 +2994,21 @@ void Player::play_audio() {
     }
     if (!m_is_playing) {
       m_is_playing = true;
-      notify_observers_is_playing_changed();  // notify that music playing now
+      notify_observers_is_playing_changed(); // notify that music playing now
     }
     return;
-  } else if (!Mix_PlayingMusic() || Mix_PausedMusic()) {  // if paused
-    Mix_ResumeMusic();                                    // then just resume
+  } else if (!Mix_PlayingMusic() || Mix_PausedMusic()) { // if paused
+    Mix_ResumeMusic();                                   // then just resume
     if (!m_is_playing) {
       m_is_playing = true;
-      notify_observers_is_playing_changed();  // notify that music playing now
+      notify_observers_is_playing_changed(); // notify that music playing now
     }
     return;
   }
 }
 
 void Player::stop_audio() {
-  Mix_HaltMusic();  // stop playing
+  Mix_HaltMusic(); // stop playing
   if (m_is_playing) {
     m_is_playing = false;
     notify_observers_is_playing_changed();
@@ -3029,7 +3016,7 @@ void Player::stop_audio() {
 }
 
 void Player::pause_audio() {
-  Mix_PauseMusic();  // pause playing
+  Mix_PauseMusic(); // pause playing
   if (m_is_playing) {
     m_is_playing = false;
     notify_observers_is_playing_changed();
@@ -3046,7 +3033,8 @@ void Player::start_server() {
 
 void Player::stop_server() {
   serverRunning = false;
-  if (m_server_thread.joinable()) m_server_thread.join();
+  if (m_server_thread.joinable())
+    m_server_thread.join();
 }
 
 #endif

@@ -49,7 +49,7 @@ if(PKG_PipeWire_FOUND)
   FetchContent_Declare(
     rohrkabel
     GIT_REPOSITORY "https://github.com/Soundux/rohrkabel"
-    GIT_TAG v1.5)
+    GIT_TAG v5.1)
   FetchContent_MakeAvailable(rohrkabel)
   target_link_libraries(crescendo PRIVATE rohrkabel)
 elseif(PulseAudio_FOUND)

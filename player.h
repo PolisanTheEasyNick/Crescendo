@@ -23,8 +23,9 @@
 #include <pipewire/pipewire.h>
 
 #include <rohrkabel/link/link.hpp>
-#include <rohrkabel/main_loop.hpp>
 #include <rohrkabel/registry/registry.hpp>
+#include <rohrkabel/registry/events.hpp>
+#include <rohrkabel/node/node.hpp>
 #endif
 
 #ifdef SUPPORT_AUDIO_OUTPUT
