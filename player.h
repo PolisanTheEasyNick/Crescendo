@@ -26,6 +26,7 @@
 #include <rohrkabel/registry/registry.hpp>
 #include <rohrkabel/registry/events.hpp>
 #include <rohrkabel/node/node.hpp>
+#include <rohrkabel/port/port.hpp>
 #endif
 
 #ifdef SUPPORT_AUDIO_OUTPUT

@@ -452,13 +452,15 @@ Player::Player(bool with_gui) {
 
 #ifdef SUPPORT_AUDIO_OUTPUT
   // if we can use audio output then initialize SDL
-  if (SDL_Init(SDL_INIT_AUDIO) < 0) {
-    std::cerr << "SDL initialization failed: " << SDL_GetError() << std::endl;
-    exit(EXIT_FAILURE);
-  }
-  if (Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 4096) < 0) {
-    std::cerr << "Mix_OpenAudio failed: " << Mix_GetError() << std::endl;
-    exit(EXIT_FAILURE);
+  if(m_with_gui) {
+      if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+        std::cerr << "SDL initialization failed: " << SDL_GetError() << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      if (Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 4096) < 0) {
+        std::cerr << "Mix_OpenAudio failed: " << Mix_GetError() << std::endl;
+        exit(EXIT_FAILURE);
+      }
   }
 #endif
 }
@@ -2316,6 +2318,10 @@ void Player::set_output_device(unsigned short output_sink_index) {
     uint32_t output_node;
   };
 
+  struct port_my {
+      bool channel; //0 for FL, 1 for FR
+  };
+
   std::vector<node_my> nodes;
   std::vector<link_my> links;
   pw_metadata *metadata = nullptr;
@@ -2367,27 +2373,34 @@ void Player::set_output_device(unsigned short output_sink_index) {
         }
       });
   core->update();
-  uint32_t current_player_id = -1;
+
+  std::vector<uint32_t> current_player_ids;
+  // searching to which node client linked
   for (const auto &node : nodes) {
     if (node.proc_id == proc_id && node.media_class == "Stream/Output/Audio") {
-      current_player_id = node.node_id;
+          Helper::get_instance().log("Found node #" + std::to_string(node.node_id) + " for player with PID: " + std::to_string(node.proc_id));
+        current_player_ids.push_back(node.node_id);
     };
   }
 
-  // searching to which node client linked
+
   for (const auto &link : links) {
-    if (link.output_node == current_player_id) {
+    if(std::find(current_player_ids.begin(), current_player_ids.end(), link.output_node) != current_player_ids.end()) {
       if (metadata) {
-        pw_metadata_set_property(metadata, current_player_id, "target.node",
+            Helper::get_instance().log("Setting link #" + std::to_string(link.link_id) + " output node #" + std::to_string(link.output_node) + " to " + std::to_string(output_sink_index));
+
+        pw_metadata_set_property(metadata, link.output_node, "target.node",
                                  "Spa:Id",
                                  std::to_string(output_sink_index).c_str());
+        core->update();
+
       } else {
         Helper::get_instance().log(
             "Error! Metadata not found, so can't change output device.");
+        break;
       }
 
-      core->update();
-      break;
+
     }
   }
 
