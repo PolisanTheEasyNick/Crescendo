@@ -24,20 +24,13 @@ To install Crescendo, follow these steps:
 ```bash
 $ git clone https://github.com/PolisanTheEasyNick/Crescendo.git
 ```
-2. Install the dependencies required for the project  
+2. Install the dependencies required for the project
 You need to do it specifially for your package manager.  
 For example, for Arch Linux:
 ```bash
-$ sudo pacman -Sy pugixml gtkmm-4.0 dbus pulseaudio sdl2 sdl2_mixer taglib 
+$ sudo pacman -Sy pugixml gtkmm-4.0 dbus pulseaudio sdl2 sdl2_mixer taglib  sdbus-cpp
 ```
-Don't forget that PulseAudio, SDL2, SDL2_mixer, taglib packages are optional.  
-Also, you need to install sdbus-c++, which is not available in Arch Linux package repository, so you need to refer to https://github.com/Kistler-Group/sdbus-cpp#building-and-installing-the-library  
-But sdbus-c++ is available in Arch User Repository (AUR). You can install sdbus-c++ using your favourite AUR helper or manually:
-```bash
-$ git clone https://aur.archlinux.org/sdbus-cpp.git
-$ cd sdbus-cpp
-$ makepkg -si
-```
+Don't forget that PulseAudio or PipeWire, SDL2, SDL2_mixer, taglib and sdbus-cpp packages are optional.  
 3. Build the project:
 ```bash
 $ cd Crescendo
@@ -51,9 +44,12 @@ $ ./сrescendo
 ```
 
 ## Usage
-When you run Crescendo, you will see a graphical user interface that looks like default player. You can select a player by clicking the `Player` button. The information from choosed player will be displayed in real-time in the Crescendo window.  
-
+When you run Crescendo, you will see a graphical user interface that looks like default player. You can select a player by clicking the `Player` button. The information from choosed player will be displayed in real-time in the Crescendo window. 
 You can control the player by using the controls provided in the Crescendo window. You can also change the output sound device for the player by clicking the button with headphones icon and selecting the desired output device from the dropdown menu.
+![image](https://github.com/PolisanTheEasyNick/Crescendo/assets/39007846/2f9c777a-5e14-4b62-9820-b53ad3711a88)
+![image](https://github.com/PolisanTheEasyNick/Crescendo/assets/39007846/8a25ba28-abce-4084-abc5-5848834919e3)
+
+
 
 ## Contributing
 To contribute to Crescendo, follow these steps:
